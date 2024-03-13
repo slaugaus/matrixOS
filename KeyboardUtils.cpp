@@ -3,30 +3,12 @@
 #include <Arduino.h>
 #include "usb_hid_keys.h"
 
-#define KB_DEBUG_PRINT
-
-enum keyModCombos{
-  Ctrl = 1,
-  Shift,  // 2
-  CtrlShift,
-  Alt,  // 4
-  CtrlAlt,
-  AltShift,
-  CtrlAltShift,
-  Win,  // 8
-  CtrlWin,
-  ShiftWin,
-  CtrlShiftWin,
-  AltWin,
-  CtrlAltWin,
-  AltShiftWin,
-  CtrlShiftAltWin  // 15
-};
+// #define KB_DEBUG_PRINT
 
 // too lazy to make this a macro
 bool isTypableKey(int oemKey, int leds) {
-  return (oemKey >= KEY_A && oemKey <= KEY_ENTER) ||  // letters, num row, enter
-         (oemKey >= KEY_TAB && oemKey <= KEY_SLASH) ||  // punctuation
+  return (oemKey >= KEY_A && oemKey <= KEY_0) ||  // letters, num row
+         (oemKey >= KEY_MINUS && oemKey <= KEY_SLASH) ||  // punctuation
          (oemKey >= KEY_KPSLASH && oemKey <= KEY_KPENTER) ||  // keypad punctuation
          (!(leds-1) && oemKey >= KEY_KP1 && oemKey <= KEY_KPDOT)  // keypad nums if NumLock
   ;
@@ -44,13 +26,13 @@ unsigned char decodeKey(int key, int oemKey, int mods, int leds){
   }
   // Otherwise it's a shortcut
   else {
-    handleNonChar(oemKey, mods);
-    return 0;
+    return handleNonChar(oemKey, mods);
   }
 }
 
-void handleNonChar(int oemKey, int mods){
+unsigned char handleNonChar(int oemKey, int mods){
   #ifdef KB_DEBUG_PRINT
+  Serial.println();
   Serial.print("Pressed shortcut or non-character - MODS[");
   Serial.print(mods, HEX);
   Serial.print("] + OEM[");
@@ -68,7 +50,16 @@ void handleNonChar(int oemKey, int mods){
     case CtrlAltShift:
       break;
     // Ignore Win key for now :)
+    default:
+      switch(oemKey){
+        case KEY_SPACE: return ' '; // Shift+Space returns a non-char; stupid hack to not do that
+        case KEY_ENTER: return Enter;
+        case KEY_BACKSPACE: return Backspace;
+        case KEY_TAB: return Tab;
+        case KEY_ESC: return Esc;
+      }
   }
+  return 0;
 }
 
 /* Important OEM codes

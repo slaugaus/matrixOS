@@ -2,6 +2,32 @@
 * Utilities for decoding USB keyboard keys
 ***********************************************************/
 
+enum keyModCombos{
+  Ctrl = 1,
+  Shift,  // 2
+  CtrlShift,
+  Alt,  // 4
+  CtrlAlt,
+  AltShift,
+  CtrlAltShift,
+  Win,  // 8
+  CtrlWin,
+  ShiftWin,
+  CtrlShiftWin,
+  AltWin,
+  CtrlAltWin,
+  AltShiftWin,
+  CtrlShiftAltWin  // 15
+};
+
+// sucky messaging system
+enum nonCharsAndShortcuts{
+  Esc = 128,
+  Enter,
+  Backspace,
+  Tab
+};
+
 // Right modifier keys are on bits 7..4 - we don't care, so squish them together
 #define combineMods(mods) ((mods & 0b1111) | (mods >> 4))
 
@@ -13,5 +39,6 @@ unsigned char decodeKey(int key, int oemKey, int mods, int leds);
 
 /*
   Called from decodeKey; maps OEM keycodes (constant regardless of modifiers) + modifiers to functions
+  (Note that we only get 127 shortcuts - should be plenty though)
  */
-void handleNonChar(int oemKey, int mods);
+unsigned char handleNonChar(int oemKey, int mods);
