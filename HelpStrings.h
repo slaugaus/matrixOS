@@ -1,0 +1,1 @@
+#define COMMANDS_AVAILABLE "Available commands: help, \nType \"help [command]\" to get help for that command."
