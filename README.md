@@ -9,4 +9,6 @@
 | $$ | $$ | $$ \$$    $$  \$$  $$| $$      | $$|  $$ \$$\ \$$    $$ \$$    $$
 \ $$  \$$  \$$  \$$$$$$$   \$$$$  \$$       \$$ \$$   \$$  \$$$$$$   \$$$$$$ 
 ```
+by me, [@cbialorucki](https://github.com/cbialorucki), and [@Jakedez](https://github.com/Jakedez)
+
 OS-like thing for HUB75 LED matrix panels (Teensy 4 + SmartLED Shield)
