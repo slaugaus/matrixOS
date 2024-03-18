@@ -26,6 +26,9 @@
 #define TERM_CHAR_WIDTH 4
 #define TERM_CHAR_HEIGHT 6
 
+// set false if another app needs buffer control
+bool inCLI = true;
+
 #include <MatrixHardware_Teensy4_ShieldV5.h>  // SmartLED Shield for Teensy 4 (V5)
 #include <SmartMatrix.h>
 
@@ -57,17 +60,20 @@ const rgb24 colorBlue = { 0, 0, 255 };
 rgb24 termBgColor = colorBlack;
 rgb24 termInputColor = colorGreen;
 rgb24 termResponseColor = colorWhite;
+rgb24 termErrorColor = colorRed;
 
 SMARTMATRIX_ALLOCATE_BUFFERS(matrix, kMatrixWidth, kMatrixHeight, kRefreshDepth, kDmaBufferRows, kPanelType, kMatrixOptions);
 SMARTMATRIX_ALLOCATE_BACKGROUND_LAYER(backgroundLayer, kMatrixWidth, kMatrixHeight, COLOR_DEPTH, kBackgroundLayerOptions);
-SMARTMATRIX_ALLOCATE_INDEXED_LAYER(indexedLayer, kMatrixWidth, kMatrixHeight, COLOR_DEPTH, kIndexedLayerOptions);
+// TODO: Can't have 2 of these... probably need an AdafruitGFX bg layer?
+SMARTMATRIX_ALLOCATE_BACKGROUND_LAYER(gfxLayer, kMatrixWidth, kMatrixHeight, COLOR_DEPTH, kBackgroundLayerOptions);
+// SMARTMATRIX_ALLOCATE_INDEXED_LAYER(indexedLayer, kMatrixWidth, kMatrixHeight, COLOR_DEPTH, kIndexedLayerOptions);
 
-#ifdef USE_ADAFRUIT_GFX_LAYERS
-// there's not enough allocated memory to hold the long strings used by this sketch by default, this increases the memory, but it may not be large enough
-SMARTMATRIX_ALLOCATE_GFX_MONO_LAYER(scrollingLayer, kMatrixWidth, kMatrixHeight, 6 * 1024, 1, COLOR_DEPTH, kScrollingLayerOptions);
-#else
-SMARTMATRIX_ALLOCATE_SCROLLING_LAYER(scrollingLayer, kMatrixWidth, kMatrixHeight, COLOR_DEPTH, kScrollingLayerOptions);
-#endif
+// #ifdef USE_ADAFRUIT_GFX_LAYERS
+// // there's not enough allocated memory to hold the long strings used by this sketch by default, this increases the memory, but it may not be large enough
+// SMARTMATRIX_ALLOCATE_GFX_MONO_LAYER(scrollingLayer, kMatrixWidth, kMatrixHeight, 6 * 1024, 1, COLOR_DEPTH, kScrollingLayerOptions);
+// #else
+// SMARTMATRIX_ALLOCATE_SCROLLING_LAYER(scrollingLayer, kMatrixWidth, kMatrixHeight, COLOR_DEPTH, kScrollingLayerOptions);
+// #endif
 
 // KEYBOARD/CLI GLOBAL STUFF
 #include "USBHost_t36.h"
@@ -96,6 +102,21 @@ uint8_t serialCommandBufferIdx = 0;
 // Prevent typing if full?
 
 // SDIO GLOBAL STUFF
+#include <SD.h>
+#include <GifDecoder.h>
+#include "FilenameFunctions.h"
+
+/* template parameters are maxGifWidth, maxGifHeight, lzwMaxBits
+ * 
+ * lzwMaxBits is included for backwards compatibility reasons, but isn't used anymore
+ */
+GifDecoder<kMatrixWidth, kMatrixHeight, 12> decoder;
+
+// Chip select for SD card
+#define SD_CS BUILTIN_SDCARD
+
+// Teensy SD Library requires a trailing slash in the directory name
+#define GIF_DIRECTORY "/gif/"
 
 // MATRIX FUNCTIONS
 
@@ -176,14 +197,14 @@ void bgDrawString(rgb24 color, const char text[], bool newLine = true) {
 void parseCommand(char text[]) {
   Serial.println("Parse begin");
 
-  if (!text[0]){
+  if (!text[0]) {
     Serial.println("Empty string :(");
     return;
   }
   cursorNewline();
   int i = 0;
-  char *tokens[COMMAND_TOKEN_LIMIT];       // array of strings, kind of
-  tokens[0] = strtok(text, " ");  // command name should be case-insensitive
+  char *tokens[COMMAND_TOKEN_LIMIT];  // array of strings, kind of
+  tokens[0] = strtok(text, " ");      // command name should be case-insensitive
   while (tokens[i++] != NULL)
     tokens[i] = strtok(NULL, " ");
 
@@ -191,6 +212,7 @@ void parseCommand(char text[]) {
   Serial.println(" is tokens 0");
 
   if (!strcmp(tokens[0], "help")) help(tokens);
+  if (!strcmp(tokens[0], "gif")) cliGif(tokens);
   else invalidCommand(tokens[0]);
 
   DRAW_PROMPT;
@@ -202,9 +224,53 @@ void help(char *tokens[]) {
   if (!tokens[1]) {
     bgDrawString(termResponseColor, COMMANDS_AVAILABLE);
   } else if (!strcmp(tokens[1], "help")) {
-    bgDrawString(colorRed, "Oh you think you're funny do ya?");
+    bgDrawString(termErrorColor, "Oh you think you're funny do ya?");
   } else {
     invalidCommand(tokens[1]);
+  }
+}
+
+// Enumerate and possibly display the animated GIF filenames in GIFS directory
+int enumerateGIFFiles(const char *directoryName, bool displayFilenames) {
+  numberOfFiles = 0;
+  File directory = SD.open(directoryName);
+  if (!directory) {
+    return -1;
+  }
+  while (file = directory.openNextFile()) {
+    if (isAnimationFile(file.name())) {
+      numberOfFiles++;
+      if (displayFilenames) {
+        char toDisplay[64];
+        snprintf(toDisplay, 63, "%d: %s", numberOfFiles, file.name());
+        bgDrawString(termResponseColor, toDisplay);
+      }
+    } else if (displayFilenames) {
+      bgDrawString(termResponseColor, "Non-GIF: ", false);
+      bgDrawString(termResponseColor, file.name());
+    }
+    file.close();
+  }
+  //    file.close();
+  directory.close();
+  return numberOfFiles;
+}
+
+void cliGif(char *tokens[]) {
+  int num_files = enumerateGIFFiles(GIF_DIRECTORY, true);
+  if (num_files < 0) {
+    bgDrawString(termErrorColor, "No gif directory on SD card.");
+    return;
+  }
+  if (tokens[1]) {
+    int idx = atoi(tokens[1]);
+    if (idx > num_files || idx < 1) {
+      bgDrawString(termErrorColor, "Invalid file number.");
+      return;
+    }
+    inCLI = false;
+    // threads.addThread(gifPlayerLoop, idx);
+    gifPlayerLoop(idx);
   }
 }
 
@@ -247,11 +313,48 @@ void OnPress(int key) {
 }
 
 // SDIO FUNCTIONS
+void screenClearCallback(void) {
+  gfxLayer.fillScreen(colorBlack);
+}
 
+void updateScreenCallback(void) {
+  gfxLayer.swapBuffers();
+  // return;
+}
+
+void drawPixelCallback(int16_t x, int16_t y, uint8_t red, uint8_t green, uint8_t blue) {
+  gfxLayer.drawPixel(x, y, { red, green, blue });
+}
+
+// APP THREADS
+void gifPlayerLoop(int index) {
+  inCLI = false;
+  Serial.println("GIF Loop Entered");
+  static unsigned long displayStartTime_millis;
+  unsigned long now = millis();
+  // matrix.addLayer(&gfxLayer);
+  
+  if (openGifFilenameByIndex(GIF_DIRECTORY, index) >= 0) {
+    if (decoder.startDecoding() < 0) {
+      Serial.println("Decoder broke for some reason");
+      return;
+    }
+    displayStartTime_millis = now;
+  }
+
+  while (1) {  // TODO: Exit after finished playing or loop
+    // Decoder uses callbacks to draw the GIF
+    if (decoder.decodeFrame() < 0) {
+      // There's an error with this GIF, go to the next one
+      Serial.println("GIF Problem");
+      return;
+    }
+  }
+}
 
 void setup() {
   // wait 5 sec for Arduino Serial Monitor
-  Serial.begin(9600);
+  // Serial.begin();
   unsigned long start = millis();
   while (!Serial)
     if (millis() - start > 5000)
@@ -259,15 +362,21 @@ void setup() {
 
   Serial.println("\n\n### matrixOS Serial Console ###\n");
   // MATRIX INIT STUFF
+  // matrix.addLayer(&gfxLayer);
   matrix.addLayer(&backgroundLayer);
-  matrix.addLayer(&scrollingLayer);
-  matrix.addLayer(&indexedLayer);
+  // matrix.addLayer(&scrollingLayer);
+  // matrix.addLayer(&indexedLayer);
   matrix.begin();
 
   matrix.setBrightness(matrixBrightness);
 
   backgroundLayer.enableColorCorrection(true);  // probably good to have IDK
   backgroundLayer.setFont(TERM_DEFAULT_FONT);
+
+  // Clear screen
+  // backgroundLayer.fillScreen(colorBlack);
+  // backgroundLayer.swapBuffers();
+
   bgDrawString(termResponseColor, "matrixOS - (c)2024 Austin S., CJ B., Jacob D.");
   bgDrawString(termResponseColor, PROMPT, false);
   // backgroundLayer.drawString(0, TERM_CHAR_HEIGHT, termResponseColor, "> ");
@@ -279,6 +388,22 @@ void setup() {
   // keyboard1.attachRawPress(OnRawPress);
   // keyboard1.attachRawRelease(OnRawRelease);
   // SDIO INIT STUFF
+  decoder.setScreenClearCallback(screenClearCallback);
+  decoder.setUpdateScreenCallback(updateScreenCallback);
+  decoder.setDrawPixelCallback(drawPixelCallback);
+
+  decoder.setFileSeekCallback(fileSeekCallback);
+  decoder.setFilePositionCallback(filePositionCallback);
+  decoder.setFileReadCallback(fileReadCallback);
+  decoder.setFileReadBlockCallback(fileReadBlockCallback);
+  // NOTE: new callback function required after we moved to using the external AnimatedGIF library to decode GIFs
+  decoder.setFileSizeCallback(fileSizeCallback);
+
+
+  if (initFileSystem(SD_CS) < 0) {
+    bgDrawString(colorRed, "No SD card, expect some apps to break");
+    // Serial.println("No SD card, expect some apps to break");
+  }
 }
 
 void loop() {
@@ -286,7 +411,9 @@ void loop() {
   // Everything else should be a TeensyThread... eventually
   // clear screen
   // backgroundLayer.fillScreen(defaultBackgroundColor);
-  backgroundLayer.swapBuffers();
+  // TODO: For some reason, GIF playback ONLY works if this line doesn't exist
+  if (inCLI == true)
+    backgroundLayer.swapBuffers();
 }
 
 /*
@@ -310,7 +437,5 @@ void serialEvent() {
       // add it to the inputString:
       serialCommandBuffer[serialCommandBufferIdx++] = inChar;
     }
-    Serial.print("\ninputString is ");
-    Serial.println(serialCommandBuffer);
   }
 }
