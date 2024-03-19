@@ -17,50 +17,29 @@
 #include <TeensyThreads.h>
 #include <string.h>
 #include <stdio.h>
+#include "screen.h"
+// KEYBOARD/CLI GLOBAL STUFF
+#include "USBHost_t36.h"
+#include "KeyboardUtils.h"
+#include "HelpStrings.h"
+// SDIO GLOBAL STUFF
+#include <SD.h>
+#include <GifDecoder.h>
+#include "FilenameFunctions.h"
 
+// # of arguments (including command) allowed in a CLI command
+#define COMMAND_TOKEN_LIMIT 8
+#define COMMAND_MAX_LENGTH 128
+#define PROMPT "> "
+#define DRAW_PROMPT bgDrawString(termResponseColor, PROMPT, false)
+// Chip select for SD card
+#define SD_CS BUILTIN_SDCARD
+// Teensy SD Library requires a trailing slash in the directory name
+#define GIF_DIRECTORY "/gif/"
 #define flushString(str) memset(str, 0, strlen(str))
-
-// MATRIX GLOBAL STUFF
-// font3x5, font5x7, font6x10, font8x13, gohufont11, gohufont11b
-#define TERM_DEFAULT_FONT font3x5
-#define TERM_CHAR_WIDTH 4
-#define TERM_CHAR_HEIGHT 6
 
 // set false if another app needs buffer control
 bool inCLI = true;
-
-#include <MatrixHardware_Teensy4_ShieldV5.h>  // SmartLED Shield for Teensy 4 (V5)
-#include <SmartMatrix.h>
-
-#define COLOR_DEPTH 24  // Color depth (bits-per-pixel) of gfx layers
-const uint16_t kMatrixWidth = 192;
-const uint16_t kMatrixHeight = 128;
-const uint8_t kRefreshDepth = 36;                               // Tradeoff of color quality vs refresh rate, max brightness, and RAM usage.  36 is typically good, drop down to 24 if you need to.  On Teensy, multiples of 3, up to 48: 3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39, 42, 45, 48.  On ESP32: 24, 36, 48
-const uint8_t kDmaBufferRows = 4;                               // known working: 2-4, use 2 to save RAM, more to keep from dropping frames and automatically lowering refresh rate.  (This isn't used on ESP32, leave as default)
-const uint8_t kPanelType = SM_PANELTYPE_HUB75_64ROW_MOD32SCAN;  // 64x64 "HUB75E" 5-address panels
-// see docs for options: https://github.com/pixelmatix/SmartMatrix/wiki
-const uint32_t kMatrixOptions = (SM_HUB75_OPTIONS_C_SHAPE_STACKING);  // aka "serpentine" - flip alternate rows to save cable length
-const uint8_t kBackgroundLayerOptions = (SM_BACKGROUND_OPTIONS_NONE);
-const uint8_t kScrollingLayerOptions = (SM_SCROLLING_OPTIONS_NONE);
-const uint8_t kIndexedLayerOptions = (SM_INDEXED_OPTIONS_NONE);
-
-uint8_t matrixBrightness = 255;
-uint16_t termCursorX = 0;
-uint16_t termCursorY = 0;
-
-uint16_t termLastLineCurX = 0;
-uint16_t termLastLineCurY = 0;
-
-const rgb24 colorWhite = { 255, 255, 255 };
-const rgb24 colorBlack = { 0, 0, 0 };
-const rgb24 colorRed = { 255, 0, 0 };
-const rgb24 colorGreen = { 0, 255, 0 };
-const rgb24 colorBlue = { 0, 0, 255 };
-
-rgb24 termBgColor = colorBlack;
-rgb24 termInputColor = colorGreen;
-rgb24 termResponseColor = colorWhite;
-rgb24 termErrorColor = colorRed;
 
 SMARTMATRIX_ALLOCATE_BUFFERS(matrix, kMatrixWidth, kMatrixHeight, kRefreshDepth, kDmaBufferRows, kPanelType, kMatrixOptions);
 SMARTMATRIX_ALLOCATE_BACKGROUND_LAYER(backgroundLayer, kMatrixWidth, kMatrixHeight, COLOR_DEPTH, kBackgroundLayerOptions);
@@ -74,18 +53,6 @@ SMARTMATRIX_ALLOCATE_BACKGROUND_LAYER(gfxLayer, kMatrixWidth, kMatrixHeight, COL
 // #else
 // SMARTMATRIX_ALLOCATE_SCROLLING_LAYER(scrollingLayer, kMatrixWidth, kMatrixHeight, COLOR_DEPTH, kScrollingLayerOptions);
 // #endif
-
-// KEYBOARD/CLI GLOBAL STUFF
-#include "USBHost_t36.h"
-#include "KeyboardUtils.h"
-#include "HelpStrings.h"
-
-// # of arguments (including command) allowed in a CLI command
-#define COMMAND_TOKEN_LIMIT 8
-#define COMMAND_MAX_LENGTH 128
-
-#define PROMPT "> "
-#define DRAW_PROMPT bgDrawString(termResponseColor, PROMPT, false)
 
 USBHost myusb;
 KeyboardController keyboard1(myusb);
@@ -101,22 +68,11 @@ uint8_t serialCommandBufferIdx = 0;
 // Read and flush on Enter press
 // Prevent typing if full?
 
-// SDIO GLOBAL STUFF
-#include <SD.h>
-#include <GifDecoder.h>
-#include "FilenameFunctions.h"
-
 /* template parameters are maxGifWidth, maxGifHeight, lzwMaxBits
  * 
  * lzwMaxBits is included for backwards compatibility reasons, but isn't used anymore
  */
 GifDecoder<kMatrixWidth, kMatrixHeight, 12> decoder;
-
-// Chip select for SD card
-#define SD_CS BUILTIN_SDCARD
-
-// Teensy SD Library requires a trailing slash in the directory name
-#define GIF_DIRECTORY "/gif/"
 
 // MATRIX FUNCTIONS
 
@@ -127,7 +83,7 @@ void cursorNewline() {
   termLastLineCurY = termCursorY;
 
   termCursorX = 0;
-  termCursorY += TERM_CHAR_HEIGHT;
+  termCursorY += CHAR_HEIGHT;
 
   Serial.println();
 }
@@ -135,34 +91,34 @@ void cursorNewline() {
 // TODO: doesn't go up lines for some reason (cursor numbers wrong?)
 // TODO TOO: commandBuffer[i--] = \0 and redraw the string instead
 void cursorBackspace() {
-  termCursorX -= TERM_CHAR_WIDTH;
+  termCursorX -= CHAR_WIDTH;
   if (termCursorX < 0) {
     if (termLastLineCurX || termLastLineCurY) {
       // restore last cursor pos
       termCursorX = termLastLineCurX;
       termCursorY = termLastLineCurY;
     } else {
-      termCursorX = kMatrixWidth - TERM_CHAR_WIDTH;  // last character
-      termCursorY -= TERM_CHAR_HEIGHT;
+      termCursorX = kMatrixWidth - CHAR_WIDTH;  // last character
+      termCursorY -= CHAR_HEIGHT;
     }
   }
-  // lol, lmao
-  backgroundLayer.fillRectangle(termCursorX, termCursorY, termCursorX + TERM_CHAR_WIDTH, termCursorY + TERM_CHAR_HEIGHT, termBgColor);
+  // lol, lmao even
+  backgroundLayer.fillRectangle(termCursorX, termCursorY, termCursorX + CHAR_WIDTH, termCursorY + CHAR_HEIGHT, termBgColor);
 }
 
 void advanceCursor() {
-  termCursorX += TERM_CHAR_WIDTH;
+  termCursorX += CHAR_WIDTH;
   if (termCursorX >= kMatrixWidth) cursorNewline();
 }
 
 // Advances the cursor in character units
 void moveCursor(int dx = 0, int dy = 0) {
-  termCursorX += (dx * TERM_CHAR_WIDTH);
+  termCursorX += (dx * CHAR_WIDTH);
   if (termCursorX >= kMatrixWidth) {
     termCursorX = 0;
-    termCursorY += TERM_CHAR_HEIGHT;
+    termCursorY += CHAR_HEIGHT;
   }
-  termCursorY += (dy * TERM_CHAR_HEIGHT);
+  termCursorY += (dy * CHAR_HEIGHT);
 }
 
 // Moves the cursor to an arbitrary position. Does nothing if you try to go offscreen
@@ -371,7 +327,7 @@ void setup() {
   matrix.setBrightness(matrixBrightness);
 
   backgroundLayer.enableColorCorrection(true);  // probably good to have IDK
-  backgroundLayer.setFont(TERM_DEFAULT_FONT);
+  backgroundLayer.setFont(DEFAULT_FONT);
 
   // Clear screen
   // backgroundLayer.fillScreen(colorBlack);
@@ -381,7 +337,7 @@ void setup() {
   bgDrawString(termResponseColor, "(c) 2024 Austin S., CJ B., Jacob D.");
   cursorNewline();
   bgDrawString(termResponseColor, PROMPT, false);
-  // backgroundLayer.drawString(0, TERM_CHAR_HEIGHT, termResponseColor, "> ");
+  // backgroundLayer.drawString(0, CHAR_HEIGHT, termResponseColor, "> ");
   // moveCursor(2, 1);  // advance to start line
 
   // KEYBOARD INIT STUFF

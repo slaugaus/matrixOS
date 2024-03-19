@@ -1,0 +1,4 @@
+class Screen
+{
+  void InitScreen();
+};
