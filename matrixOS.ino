@@ -305,7 +305,7 @@ void routeKbSpecial(nonCharsAndShortcuts key) {
 // TODO: as this is (presumably) an ISR, consider limiting what it does
 void OnPress(int key) {
   unsigned char key_dec = decodeKey(key, keyboard1.getOemKey(), keyboard1.getModifiers(), keyboard1.LEDS());
-  if (key_dec < 128) {
+  if (key_dec && key_dec < 128) {
     // Serial.print((char)key_dec);
     bgDrawChar(termInputColor, key_dec);
     commandBuffer[commandBufferIdx++] = key_dec;
