@@ -31,7 +31,7 @@
 #define COMMAND_TOKEN_LIMIT 8
 #define COMMAND_MAX_LENGTH 128
 #define PROMPT "> "
-#define DRAW_PROMPT bgDrawString(termResponseColor, PROMPT, false)
+#define DRAW_PROMPT bgDrawString(MainScreen->termResponseColor, PROMPT, false)
 // Chip select for SD card
 #define SD_CS BUILTIN_SDCARD
 // Teensy SD Library requires a trailing slash in the directory name
@@ -74,16 +74,18 @@ uint8_t serialCommandBufferIdx = 0;
  */
 GifDecoder<kMatrixWidth, kMatrixHeight, 12> decoder;
 
+Screen *MainScreen = new Screen();
+
 // MATRIX FUNCTIONS
 
 // CLI FUNCTIONS
 void cursorNewline() {
   // save last cursor pos for backspace
-  termLastLineCurX = termCursorX;
-  termLastLineCurY = termCursorY;
+  MainScreen->termLastLineCurX = MainScreen->termCursorX;
+  MainScreen->termLastLineCurY = MainScreen->termCursorY;
 
-  termCursorX = 0;
-  termCursorY += CHAR_HEIGHT;
+  MainScreen->termCursorX = 0;
+  MainScreen->termCursorY += CHAR_HEIGHT;
 
   Serial.println();
 }
@@ -91,45 +93,45 @@ void cursorNewline() {
 // TODO: doesn't go up lines for some reason (cursor numbers wrong?)
 // TODO TOO: commandBuffer[i--] = \0 and redraw the string instead
 void cursorBackspace() {
-  termCursorX -= CHAR_WIDTH;
-  if (termCursorX < 0) {
-    if (termLastLineCurX || termLastLineCurY) {
+  MainScreen->termCursorX -= CHAR_WIDTH;
+  if (MainScreen->termCursorX < 0) {
+    if (MainScreen->termLastLineCurX || MainScreen->termLastLineCurY) {
       // restore last cursor pos
-      termCursorX = termLastLineCurX;
-      termCursorY = termLastLineCurY;
+      MainScreen->termCursorX = MainScreen->termLastLineCurX;
+      MainScreen->termCursorY = MainScreen->termLastLineCurY;
     } else {
-      termCursorX = kMatrixWidth - CHAR_WIDTH;  // last character
-      termCursorY -= CHAR_HEIGHT;
+      MainScreen->termCursorX = kMatrixWidth - CHAR_WIDTH;  // last character
+      MainScreen->termCursorY -= CHAR_HEIGHT;
     }
   }
   // lol, lmao even
-  backgroundLayer.fillRectangle(termCursorX, termCursorY, termCursorX + CHAR_WIDTH, termCursorY + CHAR_HEIGHT, termBgColor);
+  backgroundLayer.fillRectangle(MainScreen->termCursorX, MainScreen->termCursorY, MainScreen->termCursorX + CHAR_WIDTH, MainScreen->termCursorY + CHAR_HEIGHT, MainScreen->termBgColor);
 }
 
 void advanceCursor() {
-  termCursorX += CHAR_WIDTH;
-  if (termCursorX >= kMatrixWidth) cursorNewline();
+  MainScreen->termCursorX += CHAR_WIDTH;
+  if (MainScreen->termCursorX >= kMatrixWidth) cursorNewline();
 }
 
 // Advances the cursor in character units
 void moveCursor(int dx = 0, int dy = 0) {
-  termCursorX += (dx * CHAR_WIDTH);
-  if (termCursorX >= kMatrixWidth) {
-    termCursorX = 0;
-    termCursorY += CHAR_HEIGHT;
+  MainScreen->termCursorX += (dx * CHAR_WIDTH);
+  if (MainScreen->termCursorX >= kMatrixWidth) {
+    MainScreen->termCursorX = 0;
+    MainScreen->termCursorY += CHAR_HEIGHT;
   }
-  termCursorY += (dy * CHAR_HEIGHT);
+  MainScreen->termCursorY += (dy * CHAR_HEIGHT);
 }
 
 // Moves the cursor to an arbitrary position. Does nothing if you try to go offscreen
 void setCursor(int x = -1, int y = -1) {
-  if (x < kMatrixWidth && x >= 0) termCursorX = x;
-  if (y < kMatrixHeight && x >= 0) termCursorY = y;
+  if (x < kMatrixWidth && x >= 0) MainScreen->termCursorX = x;
+  if (y < kMatrixHeight && x >= 0) MainScreen->termCursorY = y;
 }
 
 // TODO: Default color (need to reorder all calls)
 void bgDrawChar(rgb24 color, char chr) {
-  backgroundLayer.drawChar(termCursorX, termCursorY, color, chr);
+  backgroundLayer.drawChar(MainScreen->termCursorX, MainScreen->termCursorY, color, chr);
   Serial.print(chr);
   advanceCursor();
 }
@@ -178,9 +180,9 @@ void parseCommand(char text[]) {
 void help(char *tokens[]) {
   Serial.println("Help");
   if (!tokens[1]) {
-    bgDrawString(termResponseColor, COMMANDS_AVAILABLE);
+    bgDrawString(MainScreen->termResponseColor, COMMANDS_AVAILABLE);
   } else if (!strcmp(tokens[1], "help")) {
-    bgDrawString(termErrorColor, "Oh you think you're funny do ya?");
+    bgDrawString(MainScreen->termErrorColor, "Oh you think you're funny do ya?");
   } else {
     invalidCommand(tokens[1]);
   }
@@ -199,11 +201,11 @@ int enumerateGIFFiles(const char *directoryName, bool displayFilenames) {
       if (displayFilenames) {
         char toDisplay[64];
         snprintf(toDisplay, 63, "%d: %s", numberOfFiles, file.name());
-        bgDrawString(termResponseColor, toDisplay);
+        bgDrawString(MainScreen->termResponseColor, toDisplay);
       }
     } else if (displayFilenames) {
-      bgDrawString(termResponseColor, "Non-GIF: ", false);
-      bgDrawString(termResponseColor, file.name());
+      bgDrawString(MainScreen->termResponseColor, "Non-GIF: ", false);
+      bgDrawString(MainScreen->termResponseColor, file.name());
     }
     file.close();
   }
@@ -215,13 +217,13 @@ int enumerateGIFFiles(const char *directoryName, bool displayFilenames) {
 void cliGif(char *tokens[]) {
   int num_files = enumerateGIFFiles(GIF_DIRECTORY, true);
   if (num_files < 0) {
-    bgDrawString(termErrorColor, "No gif directory on SD card.");
+    bgDrawString(MainScreen->termErrorColor, "No gif directory on SD card.");
     return;
   }
   if (tokens[1]) {
     int idx = atoi(tokens[1]);
     if (idx > num_files || idx < 1) {
-      bgDrawString(termErrorColor, "Invalid file number.");
+      bgDrawString(MainScreen->termErrorColor, "Invalid file number.");
       return;
     }
     inCLI = false;
@@ -233,10 +235,10 @@ void cliGif(char *tokens[]) {
 //"token" is not a valid command.\nCOMMANDS_AVAILABLE
 void invalidCommand(char token[]) {
   Serial.println("Invalid");
-  bgDrawChar(termResponseColor, '\"');
-  bgDrawString(termResponseColor, token, false);
-  bgDrawString(termResponseColor, "\" is not a valid command.");
-  bgDrawString(termResponseColor, COMMANDS_AVAILABLE);
+  bgDrawChar(MainScreen->termResponseColor, '\"');
+  bgDrawString(MainScreen->termResponseColor, token, false);
+  bgDrawString(MainScreen->termResponseColor, "\" is not a valid command.");
+  bgDrawString(MainScreen->termResponseColor, COMMANDS_AVAILABLE);
 }
 // ---END CLI COMMANDS ---
 
@@ -263,7 +265,7 @@ void OnPress(int key) {
   unsigned char key_dec = decodeKey(key, keyboard1.getOemKey(), keyboard1.getModifiers(), keyboard1.LEDS());
   if (key_dec && key_dec < 128) {
     // Serial.print((char)key_dec);
-    bgDrawChar(termInputColor, key_dec);
+    bgDrawChar(MainScreen->termInputColor, key_dec);
     commandBuffer[commandBufferIdx++] = key_dec;
   } else routeKbSpecial(key_dec);
 }
@@ -324,7 +326,7 @@ void setup() {
   // matrix.addLayer(&indexedLayer);
   matrix.begin();
 
-  matrix.setBrightness(matrixBrightness);
+  matrix.setBrightness(MainScreen->matrixBrightness);
 
   backgroundLayer.enableColorCorrection(true);  // probably good to have IDK
   backgroundLayer.setFont(DEFAULT_FONT);
@@ -333,11 +335,11 @@ void setup() {
   // backgroundLayer.fillScreen(colorBlack);
   // backgroundLayer.swapBuffers();
 
-  bgDrawString(termResponseColor, "matrixOS [Version 1.0.0.0]");
-  bgDrawString(termResponseColor, "(c) 2024 Austin S., CJ B., Jacob D.");
+  bgDrawString(MainScreen->termResponseColor, "matrixOS [Version 1.0.0.0]");
+  bgDrawString(MainScreen->termResponseColor, "(c) 2024 Austin S., CJ B., Jacob D.");
   cursorNewline();
-  bgDrawString(termResponseColor, PROMPT, false);
-  // backgroundLayer.drawString(0, CHAR_HEIGHT, termResponseColor, "> ");
+  bgDrawString(MainScreen->termResponseColor, PROMPT, false);
+  // backgroundLayer.drawString(0, CHAR_HEIGHT, MainScreen->termResponseColor, "> ");
   // moveCursor(2, 1);  // advance to start line
 
   // KEYBOARD INIT STUFF

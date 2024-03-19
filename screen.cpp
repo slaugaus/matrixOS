@@ -1,4 +1,6 @@
-class Screen
+#include "screen.h"
+
+void Screen::InitScreen()
 {
-  void InitScreen();
-};
+
+}

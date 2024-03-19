@@ -1,3 +1,5 @@
+#ifndef SCREEN_H
+#define SCREEN_H
 #include <MatrixHardware_Teensy4_ShieldV5.h>  // SmartLED Shield for Teensy 4 (V5)
 #include <SmartMatrix.h>
 
@@ -19,20 +21,24 @@ const uint8_t kBackgroundLayerOptions = (SM_BACKGROUND_OPTIONS_NONE);
 const uint8_t kScrollingLayerOptions = (SM_SCROLLING_OPTIONS_NONE);
 const uint8_t kIndexedLayerOptions = (SM_INDEXED_OPTIONS_NONE);
 
-uint8_t matrixBrightness = 255;
-uint16_t termCursorX = 0;
-uint16_t termCursorY = 0;
-
-uint16_t termLastLineCurX = 0;
-uint16_t termLastLineCurY = 0;
-
 const rgb24 colorWhite = { 255, 255, 255 };
 const rgb24 colorBlack = { 0, 0, 0 };
 const rgb24 colorRed = { 255, 0, 0 };
 const rgb24 colorGreen = { 0, 255, 0 };
 const rgb24 colorBlue = { 0, 0, 255 };
 
-rgb24 termBgColor = colorBlack;
-rgb24 termInputColor = colorGreen;
-rgb24 termResponseColor = colorWhite;
-rgb24 termErrorColor = colorRed;
+class Screen
+{
+  public:
+    uint8_t matrixBrightness = 255;
+    uint16_t termCursorX = 0;
+    uint16_t termCursorY = 0;
+    uint16_t termLastLineCurX = 0;
+    uint16_t termLastLineCurY = 0;
+    rgb24 termBgColor = colorBlack;
+    rgb24 termInputColor = colorGreen;
+    rgb24 termResponseColor = colorWhite;
+    rgb24 termErrorColor = colorRed;
+    void InitScreen();
+};
+#endif
