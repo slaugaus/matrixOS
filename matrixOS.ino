@@ -377,7 +377,9 @@ void setup() {
   // backgroundLayer.fillScreen(colorBlack);
   // backgroundLayer.swapBuffers();
 
-  bgDrawString(termResponseColor, "matrixOS - (c)2024 Austin S., CJ B., Jacob D.");
+  bgDrawString(termResponseColor, "matrixOS [Version 1.0.0.0]");
+  bgDrawString(termResponseColor, "(c) 2024 Austin S., CJ B., Jacob D.");
+  cursorNewline();
   bgDrawString(termResponseColor, PROMPT, false);
   // backgroundLayer.drawString(0, TERM_CHAR_HEIGHT, termResponseColor, "> ");
   // moveCursor(2, 1);  // advance to start line
