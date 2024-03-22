@@ -2,13 +2,17 @@
 
 #define COMMAND_TABLE_H_
 
+#ifdef __cplusplus
+ extern "C" {
+#endif
+
 #include <stdbool.h>
 
-typedef int (*fpointer) (void *);
+typedef int (*fpointer)(void *);
 
 typedef struct Command{
-	char * title;
-	char * helpInfo;
+	const char * title;
+	const char * helpInfo;
 	fpointer function;
 	struct Command * next;
 }Command;
@@ -27,5 +31,10 @@ void replaceNextSpace(char * str);
 Command* getCommand(char * title);
 
 bool GetTableStatus(void);
+
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

@@ -1,3 +1,12 @@
+#include <Arduino.h>
+// enables serial prints from the extern "C" block
+void Serialprintln(const char *msg) {Serial.println(msg);}
+void Serialprint(const char *msg) {Serial.print(msg);}
+
+// #ifdef __cplusplus
+ extern "C" {
+// #endif
+
 #include "CommandTable.h"
 #include <stdbool.h>
 #include <stdlib.h>
@@ -47,7 +56,7 @@ unsigned long long getHash(char * str){
 	return hash;
 }
 
-Command * genCommand(char * title, char * helpInfo, fpointer function){
+Command * genCommand(const char * title, const char * helpInfo, fpointer function){
 	Command * command = (Command*) malloc(sizeof(Command));
 	if (!command) return NULL;
 	command->title = title;
@@ -57,7 +66,7 @@ Command * genCommand(char * title, char * helpInfo, fpointer function){
 	return command;
 }
 
-bool appendCommand(char * title, char * helpInfo, fpointer function){
+bool appendCommand(const char * title, const char * helpInfo, fpointer function){
 	if (!isTableInitialized){
 		return false;
 	}
@@ -94,17 +103,27 @@ bool appendCommand(char * title, char * helpInfo, fpointer function){
 
 
 Command * getCommand(char * title){
-	unsigned long index = getHash(title);
-	if (!cmdTable[index])
+  Serialprint("getting: ");
+  Serialprintln(title);
+	unsigned long long index = getHash(title);
+	if (!cmdTable[index]){
+    Serialprintln("getCommand returning null 1");
 		return NULL;
+  }
 
 	Command * cursor = cmdTable[index];
+  Serialprintln("getCommand left getHash");
 
 	do{
-		if(!strcmp(cursor->title, title))
+		if(!strcmp(cursor->title, title)){
 			return cursor;		// Strings match, return function
+    }
 		cursor = cursor->next;
 	}while (cursor != NULL);
-
+  Serialprintln("getCommand returning null 2");
 	return NULL;
 }
+
+// #ifdef __cplusplus
+}
+// #endif
