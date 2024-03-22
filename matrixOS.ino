@@ -195,12 +195,12 @@ int enumerateGIFFiles(const char *directoryName, bool displayFilenames) {
   }
   while (file = directory.openNextFile()) {
     if (isAnimationFile(file.name())) {
-      numberOfFiles++;
       if (displayFilenames) {
         char toDisplay[64];
         snprintf(toDisplay, 63, "%d: %s", numberOfFiles, file.name());
         cliDrawString(toDisplay);
       }
+      numberOfFiles++;
     } else if (displayFilenames) {
       cliDrawString("Non-GIF: ", false);
       cliDrawString(file.name());
@@ -220,11 +220,15 @@ void cliGif(char *tokens[]) {
   }
   if (tokens[1]) {
     int idx = atoi(tokens[1]);
-    if (idx > num_files || idx < 1) {
+    if (idx >= num_files || idx < 0) {
       cliDrawString("Invalid file number.");
       return;
     }
     inCLI = false;
+    // NOTE: This clears textLayer.
+    // There doesn't seem to be a way to temporarily hide it.
+    textLayer.fillScreen(0);
+    textLayer.swapBuffers();
     // threads.addThread(gifPlayerLoop, idx);
     gifPlayerLoop(idx);
   }
@@ -283,7 +287,7 @@ void drawPixelCallback(int16_t x, int16_t y, uint8_t red, uint8_t green, uint8_t
 
 // APP THREADS
 void gifPlayerLoop(int index) {
-  inCLI = false;
+  // inCLI = false;
   Serial.println("GIF Loop Entered");
   static unsigned long displayStartTime_millis;
   unsigned long now = millis();
@@ -334,7 +338,6 @@ void setup() {
   cliDrawString("matrixOS [Version 1.0.0.0]");
   cliDrawString("(c) 2024 Austin S., CJ B., Jacob D.");
   cursorNewline();
-  DRAW_PROMPT;
 
   // KEYBOARD INIT STUFF
   myusb.begin();
@@ -354,9 +357,10 @@ void setup() {
 
 
   if (initFileSystem(SD_CS) < 0) {
-    cliDrawString("No SD card, expect some apps to break");
-    // Serial.println("No SD card, expect some apps to break");
+    cliDrawString("No SD card, expect some apps to break. Try restarting.");
   }
+
+  DRAW_PROMPT;
 }
 
 void loop() {
