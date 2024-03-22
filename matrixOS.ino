@@ -18,6 +18,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "screen.h"
+#include "CommandTable.h"
 // KEYBOARD/CLI GLOBAL STUFF
 #include "USBHost_t36.h"
 #include "KeyboardUtils.h"
@@ -169,15 +170,22 @@ void parseCommand(char text[]) {
   Serial.print(tokens[0]);
   Serial.println(" is tokens 0");
 
-  if (!strcmp(tokens[0], "help")) help(tokens);
-  if (!strcmp(tokens[0], "gif")) cliGif(tokens);
-  else invalidCommand(tokens[0]);
+  Command * command = getCommand(tokens[0]);
+
+  if (command){
+    command->function(tokens);
+  }
+  else{
+    invalidCommand(tokens[0]);
+  }
+
 
   DRAW_PROMPT;
   Serial.println("Parse end");
 }
 
-void help(char *tokens[]) {
+int help(void * args) {
+  char **tokens = (char**) args;
   Serial.println("Help");
   if (!tokens[1]) {
     bgDrawString(MainScreen->termResponseColor, COMMANDS_AVAILABLE);
@@ -186,6 +194,7 @@ void help(char *tokens[]) {
   } else {
     invalidCommand(tokens[1]);
   }
+  return 0;
 }
 
 // Enumerate and possibly display the animated GIF filenames in GIFS directory
@@ -214,22 +223,24 @@ int enumerateGIFFiles(const char *directoryName, bool displayFilenames) {
   return numberOfFiles;
 }
 
-void cliGif(char *tokens[]) {
+int cliGif(void* args) {
+  char **tokens = (char**) args;
   int num_files = enumerateGIFFiles(GIF_DIRECTORY, true);
   if (num_files < 0) {
     bgDrawString(MainScreen->termErrorColor, "No gif directory on SD card.");
-    return;
+    return 1;
   }
   if (tokens[1]) {
     int idx = atoi(tokens[1]);
     if (idx > num_files || idx < 1) {
       bgDrawString(MainScreen->termErrorColor, "Invalid file number.");
-      return;
+      return 1;
     }
     inCLI = false;
     // threads.addThread(gifPlayerLoop, idx);
     gifPlayerLoop(idx);
   }
+  return 0;
 }
 
 //"token" is not a valid command.\nCOMMANDS_AVAILABLE
@@ -358,6 +369,14 @@ void setup() {
   decoder.setFileReadBlockCallback(fileReadBlockCallback);
   // NOTE: new callback function required after we moved to using the external AnimatedGIF library to decode GIFs
   decoder.setFileSizeCallback(fileSizeCallback);
+
+
+  if (!initCMDTable(100)){
+    bgDrawString(colorRed, "Command Table Initialization Failed");
+  }
+
+  appendCommand("help", "Displays Help Screen", help);
+  appendCommand("gif", "", cliGif);
 
 
   if (initFileSystem(SD_CS) < 0) {
