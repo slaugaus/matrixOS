@@ -31,21 +31,20 @@
 #define COMMAND_TOKEN_LIMIT 8
 #define COMMAND_MAX_LENGTH 128
 #define PROMPT "> "
-#define DRAW_PROMPT bgDrawString(MainScreen->termResponseColor, PROMPT, false)
+#define DRAW_PROMPT cliDrawString(PROMPT, false)
 // Chip select for SD card
 #define SD_CS BUILTIN_SDCARD
 // Teensy SD Library requires a trailing slash in the directory name
 #define GIF_DIRECTORY "/gif/"
-#define flushString(str) memset(str, 0, strlen(str))
+#define flushString(str) memset(str, 0, COMMAND_MAX_LENGTH)
 
 // set false if another app needs buffer control
 bool inCLI = true;
 
 SMARTMATRIX_ALLOCATE_BUFFERS(matrix, kMatrixWidth, kMatrixHeight, kRefreshDepth, kDmaBufferRows, kPanelType, kMatrixOptions);
-SMARTMATRIX_ALLOCATE_BACKGROUND_LAYER(backgroundLayer, kMatrixWidth, kMatrixHeight, COLOR_DEPTH, kBackgroundLayerOptions);
-// TODO: Can't have 2 of these... probably need an AdafruitGFX bg layer?
+// CLI text (single color) goes on an indexed layer. Anything in "graphics mode" (images for now) goes on a full-color background layer.
 SMARTMATRIX_ALLOCATE_BACKGROUND_LAYER(gfxLayer, kMatrixWidth, kMatrixHeight, COLOR_DEPTH, kBackgroundLayerOptions);
-// SMARTMATRIX_ALLOCATE_INDEXED_LAYER(indexedLayer, kMatrixWidth, kMatrixHeight, COLOR_DEPTH, kIndexedLayerOptions);
+SMARTMATRIX_ALLOCATE_INDEXED_LAYER(textLayer, kMatrixWidth, kMatrixHeight, COLOR_DEPTH, kIndexedLayerOptions);
 
 // #ifdef USE_ADAFRUIT_GFX_LAYERS
 // // there's not enough allocated memory to hold the long strings used by this sketch by default, this increases the memory, but it may not be large enough
@@ -59,7 +58,6 @@ KeyboardController keyboard1(myusb);
 // while not referenced anywhere, this is what actually does key decoding
 USBHIDParser hid1(myusb);
 
-// TODO: Use this (should it be a std::string?)
 char commandBuffer[COMMAND_MAX_LENGTH];
 uint8_t commandBufferIdx = 0;
 char serialCommandBuffer[COMMAND_MAX_LENGTH];
@@ -90,8 +88,7 @@ void cursorNewline() {
   Serial.println();
 }
 
-// TODO: doesn't go up lines for some reason (cursor numbers wrong?)
-// TODO TOO: commandBuffer[i--] = \0 and redraw the string instead
+// TODO: hacky solution, do something with the command buffer instead
 void cursorBackspace() {
   MainScreen->termCursorX -= CHAR_WIDTH;
   if (MainScreen->termCursorX < 0) {
@@ -104,8 +101,9 @@ void cursorBackspace() {
       MainScreen->termCursorY -= CHAR_HEIGHT;
     }
   }
+
   // lol, lmao even
-  backgroundLayer.fillRectangle(MainScreen->termCursorX, MainScreen->termCursorY, MainScreen->termCursorX + CHAR_WIDTH, MainScreen->termCursorY + CHAR_HEIGHT, MainScreen->termBgColor);
+  // backgroundLayer.fillRectangle(MainScreen->termCursorX, MainScreen->termCursorY, MainScreen->termCursorX + CHAR_WIDTH, MainScreen->termCursorY + CHAR_HEIGHT, MainScreen->termBgColor);
 }
 
 void advanceCursor() {
@@ -129,14 +127,14 @@ void setCursor(int x = -1, int y = -1) {
   if (y < kMatrixHeight && x >= 0) MainScreen->termCursorY = y;
 }
 
-// TODO: Default color (need to reorder all calls)
-void bgDrawChar(rgb24 color, char chr) {
-  backgroundLayer.drawChar(MainScreen->termCursorX, MainScreen->termCursorY, color, chr);
+void cliDrawChar(char chr) {
+  // 3rd argument (index) is unused (TODOd) in SmartMatrix
+  textLayer.drawChar(MainScreen->termCursorX, MainScreen->termCursorY, 1, chr);
   Serial.print(chr);
   advanceCursor();
 }
 
-void bgDrawString(rgb24 color, const char text[], bool newLine = true) {
+void cliDrawString(const char text[], bool newLine = true) {
   int offset = 0;
   char character;
   // iterate through string
@@ -145,7 +143,7 @@ void bgDrawString(rgb24 color, const char text[], bool newLine = true) {
       cursorNewline();
       continue;
     }
-    bgDrawChar(color, character);
+    cliDrawChar(character);
   }
   if (newLine) cursorNewline();
 }
@@ -162,7 +160,7 @@ void parseCommand(char text[]) {
   cursorNewline();
   int i = 0;
   char *tokens[COMMAND_TOKEN_LIMIT];  // array of strings, kind of
-  tokens[0] = strtok(text, " ");      // command name should be case-insensitive
+  tokens[0] = strtok(text, " ");
   while (tokens[i++] != NULL)
     tokens[i] = strtok(NULL, " ");
 
@@ -180,9 +178,9 @@ void parseCommand(char text[]) {
 void help(char *tokens[]) {
   Serial.println("Help");
   if (!tokens[1]) {
-    bgDrawString(MainScreen->termResponseColor, COMMANDS_AVAILABLE);
+    cliDrawString(COMMANDS_AVAILABLE);
   } else if (!strcmp(tokens[1], "help")) {
-    bgDrawString(MainScreen->termErrorColor, "Oh you think you're funny do ya?");
+    cliDrawString("Oh you think you're funny do ya?");
   } else {
     invalidCommand(tokens[1]);
   }
@@ -201,11 +199,11 @@ int enumerateGIFFiles(const char *directoryName, bool displayFilenames) {
       if (displayFilenames) {
         char toDisplay[64];
         snprintf(toDisplay, 63, "%d: %s", numberOfFiles, file.name());
-        bgDrawString(MainScreen->termResponseColor, toDisplay);
+        cliDrawString(toDisplay);
       }
     } else if (displayFilenames) {
-      bgDrawString(MainScreen->termResponseColor, "Non-GIF: ", false);
-      bgDrawString(MainScreen->termResponseColor, file.name());
+      cliDrawString("Non-GIF: ", false);
+      cliDrawString(file.name());
     }
     file.close();
   }
@@ -217,13 +215,13 @@ int enumerateGIFFiles(const char *directoryName, bool displayFilenames) {
 void cliGif(char *tokens[]) {
   int num_files = enumerateGIFFiles(GIF_DIRECTORY, true);
   if (num_files < 0) {
-    bgDrawString(MainScreen->termErrorColor, "No gif directory on SD card.");
+    cliDrawString("No gif directory on SD card.");
     return;
   }
   if (tokens[1]) {
     int idx = atoi(tokens[1]);
     if (idx > num_files || idx < 1) {
-      bgDrawString(MainScreen->termErrorColor, "Invalid file number.");
+      cliDrawString("Invalid file number.");
       return;
     }
     inCLI = false;
@@ -234,21 +232,20 @@ void cliGif(char *tokens[]) {
 
 //"token" is not a valid command.\nCOMMANDS_AVAILABLE
 void invalidCommand(char token[]) {
-  Serial.println("Invalid");
-  bgDrawChar(MainScreen->termResponseColor, '\"');
-  bgDrawString(MainScreen->termResponseColor, token, false);
-  bgDrawString(MainScreen->termResponseColor, "\" is not a valid command.");
-  bgDrawString(MainScreen->termResponseColor, COMMANDS_AVAILABLE);
+  // Serial.println("Invalid");
+  cliDrawChar('\"');
+  cliDrawString(token, false);
+  cliDrawString("\" is not a valid command.");
+  cliDrawString(COMMANDS_AVAILABLE);
 }
 // ---END CLI COMMANDS ---
 
 // KEYBOARD FUNCTIONS
 void routeKbSpecial(nonCharsAndShortcuts key) {
-  Serial.println("Route");
+  // Serial.println("Special key");
   switch (key) {
     // case Enter: cursorNewline(); Serial.println(); break;
     case Enter:
-      // threads.addThread(parseCommand, commandBuffer);
       parseCommand(commandBuffer);
       Serial.println("Flush buffer");
       flushString(commandBuffer);
@@ -265,9 +262,9 @@ void OnPress(int key) {
   unsigned char key_dec = decodeKey(key, keyboard1.getOemKey(), keyboard1.getModifiers(), keyboard1.LEDS());
   if (key_dec && key_dec < 128) {
     // Serial.print((char)key_dec);
-    bgDrawChar(MainScreen->termInputColor, key_dec);
+    cliDrawChar(key_dec);
     commandBuffer[commandBufferIdx++] = key_dec;
-  } else routeKbSpecial(key_dec);
+  } else routeKbSpecial((nonCharsAndShortcuts) key_dec);
 }
 
 // SDIO FUNCTIONS
@@ -320,34 +317,31 @@ void setup() {
 
   Serial.println("\n\n### matrixOS Serial Console ###\n");
   // MATRIX INIT STUFF
-  // matrix.addLayer(&gfxLayer);
-  matrix.addLayer(&backgroundLayer);
-  // matrix.addLayer(&scrollingLayer);
-  // matrix.addLayer(&indexedLayer);
+  matrix.addLayer(&gfxLayer);
+  matrix.addLayer(&textLayer);
   matrix.begin();
 
   matrix.setBrightness(MainScreen->matrixBrightness);
 
-  backgroundLayer.enableColorCorrection(true);  // probably good to have IDK
-  backgroundLayer.setFont(DEFAULT_FONT);
+  gfxLayer.enableColorCorrection(true);
+  textLayer.enableColorCorrection(true);
+  textLayer.setFont(DEFAULT_FONT);
 
   // Clear screen
   // backgroundLayer.fillScreen(colorBlack);
   // backgroundLayer.swapBuffers();
 
-  bgDrawString(MainScreen->termResponseColor, "matrixOS [Version 1.0.0.0]");
-  bgDrawString(MainScreen->termResponseColor, "(c) 2024 Austin S., CJ B., Jacob D.");
+  cliDrawString("matrixOS [Version 1.0.0.0]");
+  cliDrawString("(c) 2024 Austin S., CJ B., Jacob D.");
   cursorNewline();
-  bgDrawString(MainScreen->termResponseColor, PROMPT, false);
-  // backgroundLayer.drawString(0, CHAR_HEIGHT, MainScreen->termResponseColor, "> ");
-  // moveCursor(2, 1);  // advance to start line
+  DRAW_PROMPT;
 
   // KEYBOARD INIT STUFF
   myusb.begin();
   keyboard1.attachPress(OnPress);
   // keyboard1.attachRawPress(OnRawPress);
   // keyboard1.attachRawRelease(OnRawRelease);
-  // SDIO INIT STUFF
+  // SDIO/GIF INIT STUFF
   decoder.setScreenClearCallback(screenClearCallback);
   decoder.setUpdateScreenCallback(updateScreenCallback);
   decoder.setDrawPixelCallback(drawPixelCallback);
@@ -356,12 +350,11 @@ void setup() {
   decoder.setFilePositionCallback(filePositionCallback);
   decoder.setFileReadCallback(fileReadCallback);
   decoder.setFileReadBlockCallback(fileReadBlockCallback);
-  // NOTE: new callback function required after we moved to using the external AnimatedGIF library to decode GIFs
   decoder.setFileSizeCallback(fileSizeCallback);
 
 
   if (initFileSystem(SD_CS) < 0) {
-    bgDrawString(colorRed, "No SD card, expect some apps to break");
+    cliDrawString("No SD card, expect some apps to break");
     // Serial.println("No SD card, expect some apps to break");
   }
 }
@@ -371,9 +364,9 @@ void loop() {
   // Everything else should be a TeensyThread... eventually
   // clear screen
   // backgroundLayer.fillScreen(defaultBackgroundColor);
-  // TODO: For some reason, GIF playback ONLY works if this line doesn't exist
+
   if (inCLI == true)
-    backgroundLayer.swapBuffers();
+    textLayer.swapBuffers();
 }
 
 /*
@@ -387,9 +380,10 @@ void serialEvent() {
   while (Serial.available()) {
     // get the new byte:
     char inChar = (char)Serial.read();
+    // enter was pressed with a command entered, parse it
     if (inChar == '\n' && serialCommandBufferIdx) {
-      bgDrawString(colorBlue, "Serial: ", false);
-      bgDrawString(colorBlue, serialCommandBuffer, false);
+      cliDrawString("Serial: ", false);
+      cliDrawString(serialCommandBuffer, false);
       parseCommand(serialCommandBuffer);
       flushString(serialCommandBuffer);
       serialCommandBufferIdx = 0;
