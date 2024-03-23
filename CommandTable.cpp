@@ -105,7 +105,7 @@ bool appendCommand(const char * title, const char * helpInfo, fpointer function)
 Command * getCommand(char * title){
   Serialprint("getting: ");
   Serialprintln(title);
-	unsigned long long index = getHash(title);
+	unsigned long long index = getHash(title) % tableSize;
 	if (!cmdTable[index]){
     Serialprintln("getCommand returning null 1");
 		return NULL;
