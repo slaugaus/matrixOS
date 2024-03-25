@@ -2,6 +2,9 @@
 * Utilities for decoding USB keyboard keys
 ***********************************************************/
 
+#ifndef KEYBOARD_UTILS_H
+#define KEYBOARD_UTILS_H
+
 enum keyModCombos{
   Ctrl = 1,
   Shift,  // 2
@@ -42,3 +45,5 @@ unsigned char decodeKey(int key, int oemKey, int mods, int leds);
   (Note that we only get 127 shortcuts - should be plenty though)
  */
 unsigned char handleNonChar(int oemKey, int mods);
+
+#endif
