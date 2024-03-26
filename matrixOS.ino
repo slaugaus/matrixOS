@@ -96,8 +96,9 @@ void setupCommands(void){
 
   appendCommand("help", "Displays Help Screen", help);
   appendCommand("gif", "Plays a .gif file from the SD card", cliGif);
-  appendCommand("echo", "Echoes input to console", NULL);
-  appendCommand("color", "changes text color", NULL); // TODO: call textLayer.setIndexedColor
+  appendCommand("echo", "*Echoes input to console", NULL);
+  appendCommand("color", "*changes text color", NULL); // TODO: call textLayer.setIndexedColor
+  appendCommand("cls", "*clears terminal output", NULL); 
 
   return;
 }
@@ -451,7 +452,14 @@ void screenClearCallback(void) {
 
 void updateScreenCallback(void) {
   gfxLayer.swapBuffers();
-  // return;
+  // gfxLayer.swapBuffers();
+  // // return;
+}
+void updateScreenTransparentCallback(void) {
+  gfxLayer.swapBuffers();
+  gfxLayer.fillScreen(colorBlack);
+  // gfxLayer.swapBuffers();
+  // // return;
 }
 
 void drawPixelCallback(int16_t x, int16_t y, uint8_t red, uint8_t green, uint8_t blue) {
