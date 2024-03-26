@@ -19,7 +19,13 @@ static Command ** cmdTable = NULL;
 static unsigned long tableSize = 0;
 static bool isTableInitialized = false;
 
+unsigned long getTableSize(void){
+  return tableSize;
+}
 
+Command ** getTable(void){
+  return cmdTable;
+}
 
 // Returns status of successfully sizing command table, argument is number of index locations for table
 bool initCMDTable(unsigned long size){

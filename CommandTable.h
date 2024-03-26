@@ -17,6 +17,9 @@ typedef struct Command{
 	struct Command * next;
 }Command;
 
+unsigned long getTableSize(void);
+
+Command ** getTable(void);
 
 bool initCMDTable(unsigned long size);
 

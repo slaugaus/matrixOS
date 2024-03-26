@@ -76,7 +76,7 @@ void advanceCursor();
 void moveCursor(int dx, int dy);
 void setCursor(int x, int y);
 void cliDrawChar(char chr);
-void cliDrawString(const char text[], bool newLine);
+void cliDrawString(const char* text, bool newLine = true);
 void parseCommand(char text[]);
 void help(char *tokens[]);
 int enumerateGIFFiles(const char *directoryName, bool displayFilenames);
@@ -95,7 +95,9 @@ void setupCommands(void){
   }
 
   appendCommand("help", "Displays Help Screen", help);
-  appendCommand("gif", "", cliGif);
+  appendCommand("gif", "Plays a .gif file from the SD card", cliGif);
+  appendCommand("echo", "Echoes input to console", NULL);
+  appendCommand("color", "changes text color", NULL); // TODO: call textLayer.setIndexedColor
 
   return;
 }
@@ -260,7 +262,7 @@ void cliDrawChar(char chr) {
   advanceCursor();
 }
 
-void cliDrawString(const char text[], bool newLine = true) {
+void cliDrawString(const char* text, bool newLine = true) {
   int offset = 0;
   char character;
   // iterate through string
@@ -299,7 +301,13 @@ void parseCommand(char text[]) {
 
   if (command){
     Serial.println("Command exists");
-    command->function(tokens);
+    if (command->function){
+      command->function(tokens);
+    }
+    else{
+      Serial.println("Command exists, but has no function");
+      cliDrawString("Command exists, but has no function");
+    }
   }
   else{
     Serial.println("Command not found");
@@ -311,15 +319,43 @@ void parseCommand(char text[]) {
   Serial.println("Parse end");
 }
 
+void DisplayHelp(Command * command){
+  cliDrawString(command->title, false);
+  cliDrawString(" - ", false);
+  cliDrawString(command->helpInfo);
+}
+
+void ListCommands(void){
+  unsigned long size = getTableSize();
+  Command ** table = getTable();
+  Command * cursor = NULL;
+  for (unsigned long i = 0; i < size; i++){
+    if (table[i] != NULL){
+      cursor = table[i];
+      DisplayHelp(cursor);
+      while (cursor->next){
+        cursor = cursor->next;
+        DisplayHelp(cursor);
+      }
+    }
+  }
+}
+
 int help(void * args) {
   char **tokens = (char**) args;
   Serial.println("Help entered");
   if (!tokens[1]) {
-    cliDrawString(COMMANDS_AVAILABLE);
+    // cliDrawString(COMMANDS_AVAILABLE);
+    ListCommands();
   } else if (!strcmp(tokens[1], "help")) {
     cliDrawString("Oh you think you're funny do ya?");
   } else {
-    invalidCommand(tokens[1]);
+    Command * cmd = getCommand(tokens[1]);
+    if (cmd){
+      DisplayHelp(cmd);
+    }
+    else
+      invalidCommand(tokens[1]);
   }
   return 0;
 }
@@ -335,7 +371,7 @@ int enumerateGIFFiles(const char *directoryName, bool displayFilenames) {
     if (isAnimationFile(file.name())) {
       if (displayFilenames) {
         char toDisplay[64];
-        snprintf(toDisplay, 63, "%d: %s", numberOfFiles, file.name());
+        snprintf(toDisplay, 63, "%d: %s", numberOfFiles + 1, file.name());
         cliDrawString(toDisplay);
       }
       numberOfFiles++;
@@ -355,13 +391,13 @@ int cliGif(void* args) {
   int num_files = enumerateGIFFiles(GIF_DIRECTORY, true);
   if (num_files < 0) {
     cliDrawString("No gif directory on SD card.");
-    return;
+    return 1;
   }
   if (tokens[1]) {
     int idx = atoi(tokens[1]);
-    if (idx >= num_files || idx < 0) {
+    if (idx > num_files || idx <= 0) {
       cliDrawString("Invalid file number.");
-      return;
+      return 1;
     }
     inCLI = false;
     // NOTE: This clears textLayer.
@@ -369,7 +405,7 @@ int cliGif(void* args) {
     textLayer.fillScreen(0);
     textLayer.swapBuffers();
     // threads.addThread(gifPlayerLoop, idx);
-    gifPlayerLoop(idx);
+    gifPlayerLoop(--idx);
   }
   return 0;
 }
