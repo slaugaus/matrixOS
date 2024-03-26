@@ -1,3 +1,11 @@
+/*
+ * Animated GIFs Display Code for SmartMatrix and 32x32 RGB LED Panels
+ *
+ * This file contains code to enumerate and select animated GIF files by name
+ *
+ * Written by: Craig A. Lindley
+ */
+
 #ifndef FILENAME_FUNCTIONS_H
 #define FILENAME_FUNCTIONS_H
 
