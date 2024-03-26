@@ -74,6 +74,26 @@ GifDecoder<kMatrixWidth, kMatrixHeight, 12> decoder;
 
 Screen *MainScreen = new Screen();
 
+// FUNCTION PROTOTYPES
+void cursorNewline();
+void cursorBackspace();
+void advanceCursor();
+void moveCursor(int dx = 0, int dy = 0);
+void setCursor(int x = -1, int y = -1);
+void cliDrawChar(char chr);
+void cliDrawString(const char text[], bool newLine = true);
+void parseCommand(char text[]);
+void help(char *tokens[]);
+int enumerateGIFFiles(const char *directoryName, bool displayFilenames);
+void cliGif(char *tokens[]);
+void invalidCommand(char token[]);
+void routeKbSpecial(nonCharsAndShortcuts key);
+void OnPress(int key);
+void screenClearCallback(void);
+void updateScreenCallback(void);
+void drawPixelCallback(int16_t x, int16_t y, uint8_t red, uint8_t green, uint8_t blue);
+void gifPlayerLoop(int index);
+
 // MATRIX FUNCTIONS
 
 // CLI FUNCTIONS
@@ -312,11 +332,11 @@ void gifPlayerLoop(int index) {
 }
 
 void setup() {
-  // wait 5 sec for Arduino Serial Monitor
+  // wait 2 sec for Arduino Serial Monitor
   // Serial.begin();
   unsigned long start = millis();
   while (!Serial)
-    if (millis() - start > 5000)
+    if (millis() - start > 1000)
       break;
 
   Serial.println("\n\n### matrixOS Serial Console ###\n");
