@@ -48,13 +48,6 @@ SMARTMATRIX_ALLOCATE_BUFFERS(matrix, kMatrixWidth, kMatrixHeight, kRefreshDepth,
 SMARTMATRIX_ALLOCATE_BACKGROUND_LAYER(gfxLayer, kMatrixWidth, kMatrixHeight, COLOR_DEPTH, kBackgroundLayerOptions);
 SMARTMATRIX_ALLOCATE_INDEXED_LAYER(textLayer, kMatrixWidth, kMatrixHeight, COLOR_DEPTH, kIndexedLayerOptions);
 
-// #ifdef USE_ADAFRUIT_GFX_LAYERS
-// // there's not enough allocated memory to hold the long strings used by this sketch by default, this increases the memory, but it may not be large enough
-// SMARTMATRIX_ALLOCATE_GFX_MONO_LAYER(scrollingLayer, kMatrixWidth, kMatrixHeight, 6 * 1024, 1, COLOR_DEPTH, kScrollingLayerOptions);
-// #else
-// SMARTMATRIX_ALLOCATE_SCROLLING_LAYER(scrollingLayer, kMatrixWidth, kMatrixHeight, COLOR_DEPTH, kScrollingLayerOptions);
-// #endif
-
 USBHost myusb;
 KeyboardController keyboard1(myusb);
 // while not referenced anywhere, this is what actually does key decoding
@@ -76,6 +69,133 @@ GifDecoder<kMatrixWidth, kMatrixHeight, 12> decoder;
 
 Screen *MainScreen = new Screen();
 
+// FUNCTION PROTOTYPES
+void cursorNewline();
+void cursorBackspace();
+void advanceCursor();
+void moveCursor(int dx, int dy);
+void setCursor(int x, int y);
+void cliDrawChar(char chr);
+void cliDrawString(const char text[], bool newLine);
+void parseCommand(char text[]);
+void help(char *tokens[]);
+int enumerateGIFFiles(const char *directoryName, bool displayFilenames);
+void cliGif(char *tokens[]);
+void invalidCommand(char token[]);
+void routeKbSpecial(nonCharsAndShortcuts key);
+void OnPress(int key);
+void screenClearCallback(void);
+void updateScreenCallback(void);
+void drawPixelCallback(int16_t x, int16_t y, uint8_t red, uint8_t green, uint8_t blue);
+void gifPlayerLoop(int index);
+
+void setupCommands(void){
+  if (!initCMDTable(100)){
+    cliDrawString("Command Table Initialization Failed");
+  }
+
+  appendCommand("help", "Displays Help Screen", help);
+  appendCommand("gif", "", cliGif);
+
+  return;
+}
+
+
+void setup() {
+  // wait 1 sec for Arduino Serial Monitor
+  // Serial.begin();
+  unsigned long start = millis();
+  while (!Serial)
+    if (millis() - start > 1000)
+      break;
+
+  Serial.println("\n\n### matrixOS Serial Console ###\n");
+  // MATRIX INIT STUFF
+  matrix.addLayer(&gfxLayer);
+  matrix.addLayer(&textLayer);
+  matrix.begin();
+
+  matrix.setBrightness(MainScreen->matrixBrightness);
+
+  gfxLayer.enableColorCorrection(true);
+  textLayer.enableColorCorrection(true);
+  textLayer.setFont(DEFAULT_FONT);
+
+  // Clear screen
+  // backgroundLayer.fillScreen(colorBlack);
+  // backgroundLayer.swapBuffers();
+
+  cliDrawString("matrixOS [Version 1.0.0.0]");
+  cliDrawString("(c) 2024 Austin S., CJ B., Jacob D.");
+  cursorNewline();
+
+  // KEYBOARD INIT STUFF
+  myusb.begin();
+  keyboard1.attachPress(OnPress);
+  // keyboard1.attachRawPress(OnRawPress);
+  // keyboard1.attachRawRelease(OnRawRelease);
+  // SDIO/GIF INIT STUFF
+  decoder.setScreenClearCallback(screenClearCallback);
+  decoder.setUpdateScreenCallback(updateScreenCallback);
+  decoder.setDrawPixelCallback(drawPixelCallback);
+
+  decoder.setFileSeekCallback(fileSeekCallback);
+  decoder.setFilePositionCallback(filePositionCallback);
+  decoder.setFileReadCallback(fileReadCallback);
+  decoder.setFileReadBlockCallback(fileReadBlockCallback);
+  decoder.setFileSizeCallback(fileSizeCallback);
+  
+  setupCommands();
+
+  if (initFileSystem(SD_CS) < 0) {
+    cliDrawString("No SD card, expect some apps to break. Try restarting.");
+  }
+
+  DRAW_PROMPT;
+}
+
+void loop() {
+  myusb.Task();
+  // Everything else should be a TeensyThread... eventually
+  // clear screen
+  // backgroundLayer.fillScreen(defaultBackgroundColor);
+  
+  if (isCommandAvailable()){
+      parseCommand(commandBuffer);
+      Serial.println("Flush buffer");
+      flushString(commandBuffer);
+      commandBufferIdx = 0;
+  }
+
+  if (inCLI == true)
+    textLayer.swapBuffers();
+}
+
+/*
+  SerialEvent occurs whenever a new data comes in the hardware serial RX. This
+  routine is run between each time loop() runs, so using delay inside loop can
+  delay response. Multiple bytes of data may be available.
+
+  Serial inputs will be parsed as commands.
+*/
+void serialEvent() {
+  while (Serial.available()) {
+    // get the new byte:
+    char inChar = (char)Serial.read();
+    // enter was pressed with a command entered, parse it
+    if (inChar == '\n' && serialCommandBufferIdx) {
+      cliDrawString("Serial: ", false);
+      cliDrawString(serialCommandBuffer, false);
+      parseCommand(serialCommandBuffer);
+      flushString(serialCommandBuffer);
+      serialCommandBufferIdx = 0;
+    } else {
+      // add it to the inputString:
+      serialCommandBuffer[serialCommandBufferIdx++] = inChar;
+    }
+  }
+}
+
 // MATRIX FUNCTIONS
 
 // CLI FUNCTIONS
@@ -92,6 +212,9 @@ void cursorNewline() {
 
 // TODO: hacky solution, do something with the command buffer instead
 void cursorBackspace() {
+
+  commandBuffer[commandBufferIdx--] = '\0';
+
   MainScreen->termCursorX -= CHAR_WIDTH;
   if (MainScreen->termCursorX < 0) {
     if (MainScreen->termLastLineCurX || MainScreen->termLastLineCurY) {
@@ -105,7 +228,8 @@ void cursorBackspace() {
   }
 
   // lol, lmao even
-  // backgroundLayer.fillRectangle(MainScreen->termCursorX, MainScreen->termCursorY, MainScreen->termCursorX + CHAR_WIDTH, MainScreen->termCursorY + CHAR_HEIGHT, MainScreen->termBgColor);
+  // TODO: indexed layers don't have this function
+  // textLayer.fillRectangle(MainScreen->termCursorX, MainScreen->termCursorY, MainScreen->termCursorX + CHAR_WIDTH, MainScreen->termCursorY + CHAR_HEIGHT, MainScreen->termBgColor);
 }
 
 void advanceCursor() {
@@ -209,12 +333,12 @@ int enumerateGIFFiles(const char *directoryName, bool displayFilenames) {
   }
   while (file = directory.openNextFile()) {
     if (isAnimationFile(file.name())) {
-      numberOfFiles++;
       if (displayFilenames) {
         char toDisplay[64];
         snprintf(toDisplay, 63, "%d: %s", numberOfFiles, file.name());
         cliDrawString(toDisplay);
       }
+      numberOfFiles++;
     } else if (displayFilenames) {
       cliDrawString("Non-GIF: ", false);
       cliDrawString(file.name());
@@ -231,15 +355,19 @@ int cliGif(void* args) {
   int num_files = enumerateGIFFiles(GIF_DIRECTORY, true);
   if (num_files < 0) {
     cliDrawString("No gif directory on SD card.");
-    return 1;
+    return;
   }
   if (tokens[1]) {
     int idx = atoi(tokens[1]);
-    if (idx > num_files || idx < 1) {
+    if (idx >= num_files || idx < 0) {
       cliDrawString("Invalid file number.");
-      return 1;
+      return;
     }
     inCLI = false;
+    // NOTE: This clears textLayer.
+    // There doesn't seem to be a way to temporarily hide it.
+    textLayer.fillScreen(0);
+    textLayer.swapBuffers();
     // threads.addThread(gifPlayerLoop, idx);
     gifPlayerLoop(idx);
   }
@@ -263,7 +391,6 @@ void routeKbSpecial(nonCharsAndShortcuts key) {
     // case Enter: cursorNewline(); Serial.println(); break;
     case Enter:
       raiseCommandFlag();
-
       break;
     case Backspace: cursorBackspace(); break;
     case Tab:
@@ -297,7 +424,7 @@ void drawPixelCallback(int16_t x, int16_t y, uint8_t red, uint8_t green, uint8_t
 
 // APP THREADS
 void gifPlayerLoop(int index) {
-  inCLI = false;
+  // inCLI = false;
   Serial.println("GIF Loop Entered");
   static unsigned long displayStartTime_millis;
   unsigned long now = millis();
@@ -317,113 +444,6 @@ void gifPlayerLoop(int index) {
       // There's an error with this GIF, go to the next one
       Serial.println("GIF Problem");
       return;
-    }
-  }
-}
-
-void setupCommands(void){
-  if (!initCMDTable(100)){
-    cliDrawString("Command Table Initialization Failed");
-  }
-
-  appendCommand("help", "Displays Help Screen", help);
-  appendCommand("gif", "", cliGif);
-
-  return;
-}
-
-void setup() {
-  // wait 5 sec for Arduino Serial Monitor
-  // Serial.begin();
-  unsigned long start = millis();
-  while (!Serial)
-    if (millis() - start > 5000)
-      break;
-
-  Serial.println("\n\n### matrixOS Serial Console ###\n");
-  // MATRIX INIT STUFF
-  matrix.addLayer(&gfxLayer);
-  matrix.addLayer(&textLayer);
-  matrix.begin();
-
-  matrix.setBrightness(MainScreen->matrixBrightness);
-
-  gfxLayer.enableColorCorrection(true);
-  textLayer.enableColorCorrection(true);
-  textLayer.setFont(DEFAULT_FONT);
-
-  // Clear screen
-  // backgroundLayer.fillScreen(colorBlack);
-  // backgroundLayer.swapBuffers();
-
-  cliDrawString("matrixOS [Version 1.0.0.0]");
-  cliDrawString("(c) 2024 Austin S., CJ B., Jacob D.");
-  cursorNewline();
-  DRAW_PROMPT;
-
-  // KEYBOARD INIT STUFF
-  myusb.begin();
-  keyboard1.attachPress(OnPress);
-  // keyboard1.attachRawPress(OnRawPress);
-  // keyboard1.attachRawRelease(OnRawRelease);
-  // SDIO/GIF INIT STUFF
-  decoder.setScreenClearCallback(screenClearCallback);
-  decoder.setUpdateScreenCallback(updateScreenCallback);
-  decoder.setDrawPixelCallback(drawPixelCallback);
-
-  decoder.setFileSeekCallback(fileSeekCallback);
-  decoder.setFilePositionCallback(filePositionCallback);
-  decoder.setFileReadCallback(fileReadCallback);
-  decoder.setFileReadBlockCallback(fileReadBlockCallback);
-  decoder.setFileSizeCallback(fileSizeCallback);
-
-
-
-
-  setupCommands();
-
-  if (initFileSystem(SD_CS) < 0) {
-    cliDrawString("No SD card, expect some apps to break");
-    // Serial.println("No SD card, expect some apps to break");
-  }
-}
-
-void loop() {
-  myusb.Task();
-  // Everything else should be a TeensyThread... eventually
-  // clear screen
-  // backgroundLayer.fillScreen(defaultBackgroundColor);
-  if (isCommandAvailable()){
-      parseCommand(commandBuffer);
-      Serial.println("Flush buffer");
-      flushString(commandBuffer);
-      commandBufferIdx = 0;
-  }
-  if (inCLI == true)
-    textLayer.swapBuffers();
-}
-
-/*
-  SerialEvent occurs whenever a new data comes in the hardware serial RX. This
-  routine is run between each time loop() runs, so using delay inside loop can
-  delay response. Multiple bytes of data may be available.
-
-  Serial inputs will be parsed as commands.
-*/
-void serialEvent() {
-  while (Serial.available()) {
-    // get the new byte:
-    char inChar = (char)Serial.read();
-    // enter was pressed with a command entered, parse it
-    if (inChar == '\n' && serialCommandBufferIdx) {
-      cliDrawString("Serial: ", false);
-      cliDrawString(serialCommandBuffer, false);
-      parseCommand(serialCommandBuffer);
-      flushString(serialCommandBuffer);
-      serialCommandBufferIdx = 0;
-    } else {
-      // add it to the inputString:
-      serialCommandBuffer[serialCommandBufferIdx++] = inChar;
     }
   }
 }

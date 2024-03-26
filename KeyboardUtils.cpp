@@ -1,9 +1,15 @@
 // #include "USBHost_t36.h"
 #include "KeyboardUtils.h"
 #include <Arduino.h>
+// #include <avr/wdt.h>
 #include "usb_hid_keys.h"
 
-// #define KB_DEBUG_PRINT
+// Teensy register-level hack to restart the program (like a power cycle or Arduino reset button)
+#define CPU_RESTART_ADDR (uint32_t *)0xE000ED0C
+#define CPU_RESTART_VAL 0x5FA0004
+#define CPU_RESTART (*CPU_RESTART_ADDR = CPU_RESTART_VAL);
+
+#define KB_DEBUG_PRINT
 
 // too lazy to make this a macro
 bool isTypableKey(int oemKey, int leds) {
@@ -44,8 +50,11 @@ unsigned char handleNonChar(int oemKey, int mods){
     case Ctrl:
     // Shift caught in decodeKey for capitalization
     case CtrlShift:
-    case Alt:
+    case Alt: break;
     case CtrlAlt:
+      switch(oemKey){
+        case KEY_DELETE: CPU_RESTART;
+      }
     case AltShift:
     case CtrlAltShift:
       break;
