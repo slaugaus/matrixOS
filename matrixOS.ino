@@ -46,13 +46,6 @@ SMARTMATRIX_ALLOCATE_BUFFERS(matrix, kMatrixWidth, kMatrixHeight, kRefreshDepth,
 SMARTMATRIX_ALLOCATE_BACKGROUND_LAYER(gfxLayer, kMatrixWidth, kMatrixHeight, COLOR_DEPTH, kBackgroundLayerOptions);
 SMARTMATRIX_ALLOCATE_INDEXED_LAYER(textLayer, kMatrixWidth, kMatrixHeight, COLOR_DEPTH, kIndexedLayerOptions);
 
-// #ifdef USE_ADAFRUIT_GFX_LAYERS
-// // there's not enough allocated memory to hold the long strings used by this sketch by default, this increases the memory, but it may not be large enough
-// SMARTMATRIX_ALLOCATE_GFX_MONO_LAYER(scrollingLayer, kMatrixWidth, kMatrixHeight, 6 * 1024, 1, COLOR_DEPTH, kScrollingLayerOptions);
-// #else
-// SMARTMATRIX_ALLOCATE_SCROLLING_LAYER(scrollingLayer, kMatrixWidth, kMatrixHeight, COLOR_DEPTH, kScrollingLayerOptions);
-// #endif
-
 USBHost myusb;
 KeyboardController keyboard1(myusb);
 // while not referenced anywhere, this is what actually does key decoding
@@ -78,10 +71,10 @@ Screen *MainScreen = new Screen();
 void cursorNewline();
 void cursorBackspace();
 void advanceCursor();
-void moveCursor(int dx = 0, int dy = 0);
-void setCursor(int x = -1, int y = -1);
+void moveCursor(int dx, int dy);
+void setCursor(int x, int y);
 void cliDrawChar(char chr);
-void cliDrawString(const char text[], bool newLine = true);
+void cliDrawString(const char text[], bool newLine);
 void parseCommand(char text[]);
 void help(char *tokens[]);
 int enumerateGIFFiles(const char *directoryName, bool displayFilenames);
