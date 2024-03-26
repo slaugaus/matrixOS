@@ -18,6 +18,8 @@
 #include <string.h>
 #include <stdio.h>
 #include "screen.h"
+#include "CommandTable.h"
+#include "signals.h"
 // KEYBOARD/CLI GLOBAL STUFF
 #include "USBHost_t36.h"
 #include "KeyboardUtils.h"
@@ -87,6 +89,17 @@ void updateScreenCallback(void);
 void drawPixelCallback(int16_t x, int16_t y, uint8_t red, uint8_t green, uint8_t blue);
 void gifPlayerLoop(int index);
 
+void setupCommands(void){
+  if (!initCMDTable(100)){
+    cliDrawString("Command Table Initialization Failed");
+  }
+
+  appendCommand("help", "Displays Help Screen", help);
+  appendCommand("gif", "", cliGif);
+
+  return;
+}
+
 
 void setup() {
   // wait 1 sec for Arduino Serial Monitor
@@ -131,7 +144,8 @@ void setup() {
   decoder.setFileReadCallback(fileReadCallback);
   decoder.setFileReadBlockCallback(fileReadBlockCallback);
   decoder.setFileSizeCallback(fileSizeCallback);
-
+  
+  setupCommands();
 
   if (initFileSystem(SD_CS) < 0) {
     cliDrawString("No SD card, expect some apps to break. Try restarting.");
@@ -145,6 +159,13 @@ void loop() {
   // Everything else should be a TeensyThread... eventually
   // clear screen
   // backgroundLayer.fillScreen(defaultBackgroundColor);
+  
+  if (isCommandAvailable()){
+      parseCommand(commandBuffer);
+      Serial.println("Flush buffer");
+      flushString(commandBuffer);
+      commandBufferIdx = 0;
+  }
 
   if (inCLI == true)
     textLayer.swapBuffers();
@@ -272,16 +293,27 @@ void parseCommand(char text[]) {
   Serial.print(tokens[0]);
   Serial.println(" is tokens 0");
 
-  if (!strcmp(tokens[0], "help")) help(tokens);
-  if (!strcmp(tokens[0], "gif")) cliGif(tokens);
-  else invalidCommand(tokens[0]);
+  Command * command = getCommand(tokens[0]);
+
+  Serial.println("Command got");
+
+  if (command){
+    Serial.println("Command exists");
+    command->function(tokens);
+  }
+  else{
+    Serial.println("Command not found");
+    invalidCommand(tokens[0]);
+  }
+
 
   DRAW_PROMPT;
   Serial.println("Parse end");
 }
 
-void help(char *tokens[]) {
-  Serial.println("Help");
+int help(void * args) {
+  char **tokens = (char**) args;
+  Serial.println("Help entered");
   if (!tokens[1]) {
     cliDrawString(COMMANDS_AVAILABLE);
   } else if (!strcmp(tokens[1], "help")) {
@@ -289,6 +321,7 @@ void help(char *tokens[]) {
   } else {
     invalidCommand(tokens[1]);
   }
+  return 0;
 }
 
 // Enumerate and possibly display the animated GIF filenames in GIFS directory
@@ -317,7 +350,8 @@ int enumerateGIFFiles(const char *directoryName, bool displayFilenames) {
   return numberOfFiles;
 }
 
-void cliGif(char *tokens[]) {
+int cliGif(void* args) {
+  char **tokens = (char**) args;
   int num_files = enumerateGIFFiles(GIF_DIRECTORY, true);
   if (num_files < 0) {
     cliDrawString("No gif directory on SD card.");
@@ -337,6 +371,7 @@ void cliGif(char *tokens[]) {
     // threads.addThread(gifPlayerLoop, idx);
     gifPlayerLoop(idx);
   }
+  return 0;
 }
 
 //"token" is not a valid command.\nCOMMANDS_AVAILABLE
@@ -355,10 +390,7 @@ void routeKbSpecial(nonCharsAndShortcuts key) {
   switch (key) {
     // case Enter: cursorNewline(); Serial.println(); break;
     case Enter:
-      parseCommand(commandBuffer);
-      Serial.println("Flush buffer");
-      flushString(commandBuffer);
-      commandBufferIdx = 0;
+      raiseCommandFlag();
       break;
     case Backspace: cursorBackspace(); break;
     case Tab:
