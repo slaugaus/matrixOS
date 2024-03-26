@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include "screen.h"
 #include "CommandTable.h"
+#include "signals.h"
 // KEYBOARD/CLI GLOBAL STUFF
 #include "USBHost_t36.h"
 #include "KeyboardUtils.h"
@@ -261,10 +262,8 @@ void routeKbSpecial(nonCharsAndShortcuts key) {
   switch (key) {
     // case Enter: cursorNewline(); Serial.println(); break;
     case Enter:
-      parseCommand(commandBuffer);
-      Serial.println("Flush buffer");
-      flushString(commandBuffer);
-      commandBufferIdx = 0;
+      raiseCommandFlag();
+
       break;
     case Backspace: cursorBackspace(); break;
     case Tab:
@@ -322,6 +321,17 @@ void gifPlayerLoop(int index) {
   }
 }
 
+void setupCommands(void){
+  if (!initCMDTable(100)){
+    cliDrawString("Command Table Initialization Failed");
+  }
+
+  appendCommand("help", "Displays Help Screen", help);
+  appendCommand("gif", "", cliGif);
+
+  return;
+}
+
 void setup() {
   // wait 5 sec for Arduino Serial Monitor
   // Serial.begin();
@@ -368,13 +378,9 @@ void setup() {
   decoder.setFileSizeCallback(fileSizeCallback);
 
 
-  if (!initCMDTable(100)){
-    cliDrawString("Command Table Initialization Failed");
-  }
 
-  appendCommand("help", "Displays Help Screen", help);
-  appendCommand("gif", "", cliGif);
 
+  setupCommands();
 
   if (initFileSystem(SD_CS) < 0) {
     cliDrawString("No SD card, expect some apps to break");
@@ -387,7 +393,12 @@ void loop() {
   // Everything else should be a TeensyThread... eventually
   // clear screen
   // backgroundLayer.fillScreen(defaultBackgroundColor);
-
+  if (isCommandAvailable()){
+      parseCommand(commandBuffer);
+      Serial.println("Flush buffer");
+      flushString(commandBuffer);
+      commandBufferIdx = 0;
+  }
   if (inCLI == true)
     textLayer.swapBuffers();
 }
