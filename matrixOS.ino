@@ -43,10 +43,24 @@
 // set false if another app needs buffer control
 bool inCLI = true;
 
-SMARTMATRIX_ALLOCATE_BUFFERS(matrix, kMatrixWidth, kMatrixHeight, kRefreshDepth, kDmaBufferRows, kPanelType, kMatrixOptions);
+// Processed macros to make a refactor easier, maybe
+// SMARTMATRIX_ALLOCATE_BUFFERS(matrix, kMatrixWidth, kMatrixHeight, kRefreshDepth, kDmaBufferRows, kPanelType, kMatrixOptions);
+static volatile __attribute__ ((section(".dmabuffers"), used)) SmartMatrixRefreshT4<kRefreshDepth, kMatrixWidth, kMatrixHeight, kPanelType, kMatrixOptions>::rowDataStruct rowsDataBuffer[kDmaBufferRows];
+SmartMatrixRefreshT4<kRefreshDepth, kMatrixWidth, kMatrixHeight, kPanelType, kMatrixOptions> matrixRefresh(kDmaBufferRows, rowsDataBuffer);
+SmartMatrixHub75Calc<kRefreshDepth, kMatrixWidth, kMatrixHeight, kPanelType, kMatrixOptions> matrix(kDmaBufferRows, rowsDataBuffer);
+
 // CLI text (single color) goes on an indexed layer. Anything in "graphics mode" (images for now) goes on a full-color background layer.
-SMARTMATRIX_ALLOCATE_BACKGROUND_LAYER(gfxLayer, kMatrixWidth, kMatrixHeight, COLOR_DEPTH, kBackgroundLayerOptions);
-SMARTMATRIX_ALLOCATE_INDEXED_LAYER(textLayer, kMatrixWidth, kMatrixHeight, COLOR_DEPTH, kIndexedLayerOptions);
+
+// SMARTMATRIX_ALLOCATE_BACKGROUND_LAYER(gfxLayer, kMatrixWidth, kMatrixHeight, COLOR_DEPTH, kBackgroundLayerOptions);
+typedef rgb24 SM_RGB;
+static rgb24 gfxLayerBitmap[2*kMatrixWidth*kMatrixHeight];
+static uint16_t gfxLayercolorCorrectionLUT[sizeof(SM_RGB) <= 3 ? 256 : 4096];
+static SMLayerBackground<rgb24, kBackgroundLayerOptions> gfxLayer(gfxLayerBitmap, kMatrixWidth, kMatrixHeight, gfxLayercolorCorrectionLUT);
+
+// SMARTMATRIX_ALLOCATE_INDEXED_LAYER(textLayer, kMatrixWidth, kMatrixHeight, COLOR_DEPTH, kIndexedLayerOptions);
+typedef rgb24 SM_RGB;
+static uint8_t textLayerBitmap[2 * kMatrixWidth * (kMatrixHeight / 8)];
+static SMLayerIndexed<rgb24, kIndexedLayerOptions> textLayer(textLayerBitmap, kMatrixWidth, kMatrixHeight);
 
 USBHost myusb;
 KeyboardController keyboard1(myusb);
