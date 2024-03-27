@@ -461,12 +461,10 @@ void routeKbSpecial(nonCharsAndShortcuts key) {
   // Serial.println("Special key");
   switch (key) {
     // case Enter: cursorNewline(); Serial.println(); break;
-    case Enter:
-      raiseCommandFlag();
-      break;
+    case Enter: raiseCommandFlag(); break;
     case Backspace: cursorBackspace(); break;
-    case Tab:
-    case Esc: break;
+    case Tab: break;
+    case Esc: raiseExitFlag(); break;
   }
 }
 
