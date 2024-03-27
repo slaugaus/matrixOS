@@ -20,6 +20,7 @@
 #include "screen.h"
 #include "CommandTable.h"
 #include "signals.h"
+#include "getColor.h"
 // KEYBOARD/CLI GLOBAL STUFF
 #include "USBHost_t36.h"
 #include "KeyboardUtils.h"
@@ -95,8 +96,14 @@ int displayVersion(void * args){
   return 0;
 }
 
+
+// Global colors for foreground and background
+static rgb24 fcolor2 =  {255, 255, 255};
+static rgb24 bcolor2  = {0, 0, 0};
+
 int clearScreen(void * args){
     textLayer.fillScreen(0);
+    
     textLayer.swapBuffers();
     setCursor(0, 0);
 
@@ -113,6 +120,54 @@ int echoText(void * args){
   return 0;
 }
 
+
+int setColor(void * args){
+  char ** arguments = (char**) args;
+  if (!arguments[1]){
+    cliDrawString("No Color Provided");
+    return 1;
+  }
+  rgb24 fcolor;
+  rgb24 bcolor;
+  char background = arguments[1][0];
+  char foreground;
+  bool both = (bool) arguments[1][1];
+  if (!both)
+    foreground = background;
+  else
+    foreground = arguments[1][1];
+
+
+
+  fcolor = getColor(foreground);
+  bool invalid = invalidColor;
+  if (both){
+    bcolor = getColor(background);
+    invalid = invalid || invalidColor;
+  }
+  else{
+    if (fcolor.red == bcolor2.red && fcolor.green == bcolor2.green && fcolor.blue == bcolor2.blue){
+      invalid = true;
+    }
+  }
+
+
+  if (!invalid && (fcolor.red != bcolor.red || fcolor.green != bcolor.green || fcolor.blue != bcolor.blue)){
+    fcolor2 = fcolor;
+    textLayer.setIndexedColor(1, fcolor);
+    if (both){
+      bcolor2 = bcolor;
+      gfxLayer.fillScreen(bcolor);
+      gfxLayer.swapBuffers();
+    }
+    return 0;
+  }
+  else{
+    cliDrawString("Invalid Color");
+  }
+    return 0;
+}
+
 void setupCommands(void){
   if (!initCMDTable(100)){
     cliDrawString("Command Table Initialization Failed");
@@ -121,7 +176,7 @@ void setupCommands(void){
   appendCommand("help", "Displays Help Screen", help);
   appendCommand("gif", "Plays a .gif file from the SD card", cliGif);
   appendCommand("echo", "Echoes input to console", echoText);
-  appendCommand("color", "*changes text color", NULL); // TODO: call textLayer.setIndexedColor
+  appendCommand("color", "changes text & bg colors (0 - f)", setColor); // TODO: call textLayer.setIndexedColor
   appendCommand("cls", "clears terminal output", clearScreen); 
   appendCommand("ver", "displays current version", displayVersion);
 
@@ -325,6 +380,10 @@ void parseCommand(char text[]) {
   Serial.println("Command got");
 
   if (command){
+    if (tokens[1] && !strcmp("/?", tokens[1])){
+      cliDrawString(command->helpInfo);
+      return;
+    }
     Serial.println("Command exists");
     if (command->function){
       command->function(tokens);
@@ -431,7 +490,7 @@ int cliGif(void* args) {
     textLayer.swapBuffers();
     // threads.addThread(gifPlayerLoop, idx);
     gifPlayerLoop(--idx);
-    gfxLayer.fillScreen(colorBlack);
+    gfxLayer.fillScreen(bcolor2);
     gfxLayer.swapBuffers();
     clearScreen(NULL);
   }
@@ -474,7 +533,7 @@ void OnPress(int key) {
 
 // SDIO FUNCTIONS
 void screenClearCallback(void) {
-  gfxLayer.fillScreen(colorBlack);
+  gfxLayer.fillScreen(bcolor2);
 }
 
 void updateScreenCallback(void) {
@@ -484,7 +543,7 @@ void updateScreenCallback(void) {
 }
 void updateScreenTransparentCallback(void) {
   gfxLayer.swapBuffers();
-  gfxLayer.fillScreen(colorBlack);
+  gfxLayer.fillScreen(bcolor2);
   // gfxLayer.swapBuffers();
   // // return;
 }
