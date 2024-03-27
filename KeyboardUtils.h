@@ -29,7 +29,8 @@ enum nonCharsAndShortcuts{
   Enter,
   Backspace,
   Tab,
-  CtrlL
+  CtrlL,
+  CtrlAltDelete,
 };
 
 // Right modifier keys are on bits 7..4 - we don't care, so squish them together

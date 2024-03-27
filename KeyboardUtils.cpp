@@ -5,11 +5,6 @@
 #include "usb_hid_keys.h"
 // #include "signals.h"
 
-// Teensy register-level hack to restart the program (like a power cycle or Arduino reset button)
-#define CPU_RESTART_ADDR (uint32_t *)0xE000ED0C
-#define CPU_RESTART_VAL 0x5FA0004
-#define CPU_RESTART (*CPU_RESTART_ADDR = CPU_RESTART_VAL);
-
 #define KB_DEBUG_PRINT
 
 // too lazy to make this a macro
@@ -57,7 +52,7 @@ unsigned char handleNonChar(int oemKey, int mods){
     case Alt: break;
     case CtrlAlt:
       switch(oemKey){
-        case KEY_DELETE: CPU_RESTART;
+        case KEY_DELETE: return CtrlAltDelete;
       }
     case AltShift:
     case CtrlAltShift:

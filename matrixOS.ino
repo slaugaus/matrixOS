@@ -63,6 +63,10 @@ typedef rgb24 SM_RGB;
 static uint8_t textLayerBitmap[2 * kMatrixWidth * (kMatrixHeight / 8)];
 static SMLayerIndexed<rgb24, kIndexedLayerOptions> textLayer(textLayerBitmap, kMatrixWidth, kMatrixHeight);
 
+// Global colors for foreground and background
+static rgb24 fcolor2 =  {255, 255, 255};
+static rgb24 bcolor2  = {0, 0, 0};
+
 USBHost myusb;
 KeyboardController keyboard1(myusb);
 // while not referenced anywhere, this is what actually does key decoding
@@ -104,16 +108,14 @@ void updateScreenCallback(void);
 void drawPixelCallback(int16_t x, int16_t y, uint8_t red, uint8_t green, uint8_t blue);
 void gifPlayerLoop(int index);
 
+// Teensy register-level hack to restart the program (like a power cycle or Arduino reset button)
+int cpuRestart() { ( *((uint32_t *)0xE000ED0C) = 0x5FA0004); }
+
 int displayVersion(void * args){
   cliDrawString("matrixOS [Version 1.0.0.0]");
   cliDrawString("(c) 2024 Austin S., CJ B., Jacob D.");
   return 0;
 }
-
-
-// Global colors for foreground and background
-static rgb24 fcolor2 =  {255, 255, 255};
-static rgb24 bcolor2  = {0, 0, 0};
 
 int clearScreen(void * args){
     textLayer.fillScreen(0);
@@ -190,9 +192,10 @@ void setupCommands(void){
   appendCommand("help", "Displays Help Screen", help);
   appendCommand("gif", "Plays a .gif file from the SD card", cliGif);
   appendCommand("echo", "Echoes input to console", echoText);
-  appendCommand("color", "changes text & bg colors (0 - f)", setColor); // TODO: call textLayer.setIndexedColor
-  appendCommand("cls", "clears terminal output", clearScreen); 
+  appendCommand("color", "changes text & bg colors (0 - f)", setColor);
+  appendCommand("cls", "clears terminal output (Ctrl+L)", clearScreen); 
   appendCommand("ver", "displays current version", displayVersion);
+  appendCommand("reset", "resets the system (Ctrl+Alt+Del)", cpuRestart);
 
   return;
 }
@@ -423,7 +426,7 @@ void parseCommand(char text[]) {
 
 // For assigning commands to keyboard shortcuts
 void fakeCommand(const char *cmd){
-  strncpy(commandBuffer, cmd, COMMAND_MAX_LENGTH);
+  strncpy(commandBuffer, cmd, COMMAND_MAX_LENGTH-1);  // -1 to preserve null terminator?
   raiseCommandFlag();
 }
 
@@ -541,6 +544,7 @@ void routeKbSpecial(nonCharsAndShortcuts key) {
     case Tab: break;
     case Esc: raiseExitFlag(); break;
     case CtrlL: fakeCommand("cls"); break;
+    case CtrlAltDelete: fakeCommand("reset"); break;
   }
 }
 
