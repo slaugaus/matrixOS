@@ -3,6 +3,8 @@
 
 void raiseCommandFlag(void);
 bool isCommandAvailable(void);
+void raiseExitFlag(void);
+bool checkExitSignal(void);
 
 
 #endif

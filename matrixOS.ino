@@ -89,6 +89,20 @@ void updateScreenCallback(void);
 void drawPixelCallback(int16_t x, int16_t y, uint8_t red, uint8_t green, uint8_t blue);
 void gifPlayerLoop(int index);
 
+int displayVersion(void * args){
+  cliDrawString("matrixOS [Version 1.0.0.0]");
+  cliDrawString("(c) 2024 Austin S., CJ B., Jacob D.");
+  return 0;
+}
+
+int clearScreen(void * args){
+    textLayer.fillScreen(0);
+    textLayer.swapBuffers();
+    setCursor(0, 0);
+
+    return 0;
+}
+
 void setupCommands(void){
   if (!initCMDTable(100)){
     cliDrawString("Command Table Initialization Failed");
@@ -98,7 +112,8 @@ void setupCommands(void){
   appendCommand("gif", "Plays a .gif file from the SD card", cliGif);
   appendCommand("echo", "*Echoes input to console", NULL);
   appendCommand("color", "*changes text color", NULL); // TODO: call textLayer.setIndexedColor
-  appendCommand("cls", "*clears terminal output", NULL); 
+  appendCommand("cls", "clears terminal output", clearScreen); 
+  appendCommand("ver", "displays current version", displayVersion);
 
   return;
 }
@@ -128,8 +143,7 @@ void setup() {
   // backgroundLayer.fillScreen(colorBlack);
   // backgroundLayer.swapBuffers();
 
-  cliDrawString("matrixOS [Version 1.0.0.0]");
-  cliDrawString("(c) 2024 Austin S., CJ B., Jacob D.");
+  displayVersion(NULL);
   cursorNewline();
 
   // KEYBOARD INIT STUFF
@@ -170,7 +184,7 @@ void loop() {
       commandBufferIdx = 0;
   }
 
-  if (inCLI == true)
+  // if (inCLI == true)
     textLayer.swapBuffers();
 }
 
@@ -216,7 +230,7 @@ void cursorNewline() {
 // TODO: hacky solution, do something with the command buffer instead
 void cursorBackspace() {
 
-  commandBuffer[commandBufferIdx--] = '\0';
+  commandBuffer[--commandBufferIdx] = '\0';
 
   MainScreen->termCursorX -= CHAR_WIDTH;
   if (MainScreen->termCursorX < 0) {
@@ -407,6 +421,9 @@ int cliGif(void* args) {
     textLayer.swapBuffers();
     // threads.addThread(gifPlayerLoop, idx);
     gifPlayerLoop(--idx);
+    gfxLayer.fillScreen(colorBlack);
+    gfxLayer.swapBuffers();
+    clearScreen(NULL);
   }
   return 0;
 }
@@ -482,7 +499,7 @@ void gifPlayerLoop(int index) {
     displayStartTime_millis = now;
   }
 
-  while (1) {  // TODO: Exit after finished playing or loop
+  while (!checkExitSignal()) {  // TODO: Exit after finished playing or loop
     // Decoder uses callbacks to draw the GIF
     if (decoder.decodeFrame() < 0) {
       // There's an error with this GIF, go to the next one

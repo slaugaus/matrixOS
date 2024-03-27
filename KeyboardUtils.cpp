@@ -3,6 +3,7 @@
 #include <Arduino.h>
 // #include <avr/wdt.h>
 #include "usb_hid_keys.h"
+#include "signals.h"
 
 // Teensy register-level hack to restart the program (like a power cycle or Arduino reset button)
 #define CPU_RESTART_ADDR (uint32_t *)0xE000ED0C
@@ -65,7 +66,7 @@ unsigned char handleNonChar(int oemKey, int mods){
         case KEY_ENTER: return Enter;
         case KEY_BACKSPACE: return Backspace;
         case KEY_TAB: return Tab;
-        case KEY_ESC: return Esc;
+        case KEY_ESC: raiseExitFlag();
       }
   }
   return 0;
