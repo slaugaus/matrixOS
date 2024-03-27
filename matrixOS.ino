@@ -103,6 +103,16 @@ int clearScreen(void * args){
     return 0;
 }
 
+int echoText(void * args){
+  char ** arguments = (char**) args;
+  while (*(++arguments)){
+    cliDrawString(*arguments, false);
+    cliDrawString(" ", false);
+  }
+  cursorNewline();
+  return 0;
+}
+
 void setupCommands(void){
   if (!initCMDTable(100)){
     cliDrawString("Command Table Initialization Failed");
@@ -110,7 +120,7 @@ void setupCommands(void){
 
   appendCommand("help", "Displays Help Screen", help);
   appendCommand("gif", "Plays a .gif file from the SD card", cliGif);
-  appendCommand("echo", "*Echoes input to console", NULL);
+  appendCommand("echo", "Echoes input to console", echoText);
   appendCommand("color", "*changes text color", NULL); // TODO: call textLayer.setIndexedColor
   appendCommand("cls", "clears terminal output", clearScreen); 
   appendCommand("ver", "displays current version", displayVersion);
