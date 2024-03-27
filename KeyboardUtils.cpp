@@ -49,6 +49,9 @@ unsigned char handleNonChar(int oemKey, int mods){
   // Assumes mods was ran through combineMods
   switch(mods){
     case Ctrl:
+      switch(oemKey){
+        case KEY_L: return CtrlL; // Ctrl+L clears screen
+      }
     // Shift caught in decodeKey for capitalization
     case CtrlShift:
     case Alt: break;

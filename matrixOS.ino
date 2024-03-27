@@ -352,6 +352,12 @@ void parseCommand(char text[]) {
   Serial.println("Parse end");
 }
 
+// For assigning commands to keyboard shortcuts
+void fakeCommand(const char *cmd){
+  strncpy(commandBuffer, cmd, COMMAND_MAX_LENGTH);
+  raiseCommandFlag();
+}
+
 void DisplayHelp(Command * command){
   cliDrawString(command->title, false);
   cliDrawString(" - ", false);
@@ -465,6 +471,7 @@ void routeKbSpecial(nonCharsAndShortcuts key) {
     case Backspace: cursorBackspace(); break;
     case Tab: break;
     case Esc: raiseExitFlag(); break;
+    case CtrlL: fakeCommand("cls"); break;
   }
 }
 
