@@ -241,12 +241,13 @@ void cursorNewline() {
   Serial.println();
 }
 
-// TODO: hacky solution, do something with the command buffer instead
+// TODO: still a hacky solution in terms of cursor movement
 void cursorBackspace() {
 
   commandBuffer[--commandBufferIdx] = '\0';
 
   MainScreen->termCursorX -= CHAR_WIDTH;
+  // TODO: need much better logic for going back a line
   if (MainScreen->termCursorX < 0) {
     if (MainScreen->termLastLineCurX || MainScreen->termLastLineCurY) {
       // restore last cursor pos
@@ -258,9 +259,12 @@ void cursorBackspace() {
     }
   }
 
-  // lol, lmao even
-  // TODO: indexed layers don't have this function
-  // textLayer.fillRectangle(MainScreen->termCursorX, MainScreen->termCursorY, MainScreen->termCursorX + CHAR_WIDTH, MainScreen->termCursorY + CHAR_HEIGHT, MainScreen->termBgColor);
+  // erase pixels of erased character
+  for (int x = 0; x < CHAR_WIDTH; x++){
+    for (int y = 0; y < CHAR_HEIGHT; y++){
+      textLayer.drawPixel(MainScreen->termCursorX + x, MainScreen->termCursorY + y, 0);
+    }
+  }
 }
 
 void advanceCursor() {
