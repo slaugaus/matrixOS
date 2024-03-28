@@ -21,7 +21,7 @@ int fileReadCallback(void);
 int fileReadBlockCallback(void *buffer, int numberOfBytes);
 int fileSizeCallback(void);
 
-// extern int numberOfFiles;
+extern int numberOfFiles;
 #include <SD.h>
 extern File file;
 

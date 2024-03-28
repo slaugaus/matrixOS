@@ -114,7 +114,7 @@ void drawPixelCallback(int16_t x, int16_t y, uint8_t red, uint8_t green, uint8_t
 void gifPlayerLoop(int index);
 
 // Teensy register-level hack to restart the program (like a power cycle or Arduino reset button)
-int cpuRestart() { ( *((uint32_t *)0xE000ED0C) = 0x5FA0004); }
+int cpuRestart(void * args) { ( *((uint32_t *)0xE000ED0C) = 0x5FA0004); return 0; }
 
 int displayVersion(void * args){
   cliDrawString("matrixOS [Version 1.0.0.0]");
@@ -476,7 +476,7 @@ int help(void * args) {
 
 // Enumerate and possibly display the files of a specified type (.XXX, all caps) in a folder
 int enumerateFiles(const char *directoryName, bool displayFilenames, const char *fileType) {
-  int numberOfFiles = 0;
+  numberOfFiles = 0;
   File directory = SD.open(directoryName);
   if (!directory) {
     return -1;
