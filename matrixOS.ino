@@ -27,6 +27,7 @@
 #include "HelpStrings.h"
 // SDIO GLOBAL STUFF
 #include <SD.h>
+#include <PNGdec.h>
 #include <GifDecoder.h>
 #include "FilenameFunctions.h"
 
@@ -39,6 +40,8 @@
 #define SD_CS BUILTIN_SDCARD
 // Teensy SD Library requires a trailing slash in the directory name
 #define GIF_DIRECTORY "/gif/"
+#define PNG_DIRECTORY "/png/"
+#define JPEG_DIRECTORY "/jpeg/"
 #define flushString(str) memset(str, 0, COMMAND_MAX_LENGTH)
 
 // set false if another app needs buffer control
@@ -86,6 +89,8 @@ uint8_t serialCommandBufferIdx = 0;
  */
 GifDecoder<kMatrixWidth, kMatrixHeight, 12> decoder;
 
+PNG png;
+
 Screen *MainScreen = new Screen();
 
 // FUNCTION PROTOTYPES
@@ -98,7 +103,7 @@ void cliDrawChar(char chr);
 void cliDrawString(const char* text, bool newLine = true);
 void parseCommand(char text[]);
 void help(char *tokens[]);
-int enumerateGIFFiles(const char *directoryName, bool displayFilenames);
+int enumerateFiles(const char *directoryName, bool displayFilenames);
 void cliGif(char *tokens[]);
 void invalidCommand(char token[]);
 void routeKbSpecial(nonCharsAndShortcuts key);
@@ -204,10 +209,8 @@ void setupCommands(void){
 void setup() {
   // wait 1 sec for Arduino Serial Monitor
   // Serial.begin();
-  unsigned long start = millis();
-  while (!Serial)
-    if (millis() - start > 1000)
-      break;
+  // unsigned long start = millis();
+  while (!Serial && millis() < 1000);
 
   Serial.println("\n\n### matrixOS Serial Console ###\n");
   // MATRIX INIT STUFF
@@ -247,7 +250,7 @@ void setup() {
   setupCommands();
 
   if (initFileSystem(SD_CS) < 0) {
-    cliDrawString("No SD card, expect some apps to break. Try restarting.");
+    cliDrawString("No SD card found. Try restarting.");
   }
 
   DRAW_PROMPT;
@@ -471,15 +474,15 @@ int help(void * args) {
   return 0;
 }
 
-// Enumerate and possibly display the animated GIF filenames in GIFS directory
-int enumerateGIFFiles(const char *directoryName, bool displayFilenames) {
-  numberOfFiles = 0;
+// Enumerate and possibly display the files of a specified type (.XXX, all caps) in a folder
+int enumerateFiles(const char *directoryName, bool displayFilenames, const char *fileType) {
+  int numberOfFiles = 0;
   File directory = SD.open(directoryName);
   if (!directory) {
     return -1;
   }
   while (file = directory.openNextFile()) {
-    if (isAnimationFile(file.name())) {
+    if (isFileType(file.name(), fileType)) {
       if (displayFilenames) {
         char toDisplay[64];
         snprintf(toDisplay, 63, "%d: %s", numberOfFiles + 1, file.name());
@@ -487,7 +490,7 @@ int enumerateGIFFiles(const char *directoryName, bool displayFilenames) {
       }
       numberOfFiles++;
     } else if (displayFilenames) {
-      cliDrawString("Non-GIF: ", false);
+      // cliDrawString("Other type: ", false);
       cliDrawString(file.name());
     }
     file.close();
@@ -499,7 +502,7 @@ int enumerateGIFFiles(const char *directoryName, bool displayFilenames) {
 
 int cliGif(void* args) {
   char **tokens = (char**) args;
-  int num_files = enumerateGIFFiles(GIF_DIRECTORY, true);
+  int num_files = enumerateFiles(GIF_DIRECTORY, true, ".GIF");
   if (num_files < 0) {
     cliDrawString("No gif directory on SD card.");
     return 1;
@@ -517,6 +520,7 @@ int cliGif(void* args) {
     textLayer.swapBuffers();
     // threads.addThread(gifPlayerLoop, idx);
     gifPlayerLoop(--idx);
+    // on player exit...
     gfxLayer.fillScreen(bcolor2);
     gfxLayer.swapBuffers();
     clearScreen(NULL);
@@ -587,7 +591,7 @@ void gifPlayerLoop(int index) {
   unsigned long now = millis();
   // matrix.addLayer(&gfxLayer);
   
-  if (openGifFilenameByIndex(GIF_DIRECTORY, index) >= 0) {
+  if (openFilenameByIndex(GIF_DIRECTORY, index, ".GIF") >= 0) {
     if (decoder.startDecoding() < 0) {
       Serial.println("Decoder broke for some reason");
       return;

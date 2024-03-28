@@ -45,29 +45,22 @@ int initFileSystem(int chipSelectPin) {
   return 0;
 }
 
-bool isAnimationFile(const char filename[]) {
+bool isFileType(const char filename[], const char extension[]) {
   String filenameString(filename);
-
-#if defined(ESP32)
-  // ESP32 filename includes the full path, so need to remove the path before looking at the filename
-  int pathindex = filenameString.lastIndexOf("/");
-  if (pathindex >= 0)
-    filenameString.remove(0, pathindex + 1);
-#endif
 
   if ((filenameString[0] == '_') || (filenameString[0] == '~') || (filenameString[0] == '.')) {
     return false;
   }
 
   filenameString.toUpperCase();
-  if (filenameString.endsWith(".GIF") != 1)
+  if (filenameString.endsWith(extension) != 1)
     return false;
 
   return true;
 }
 
 // Get the full path/filename of the GIF file with specified index
-void getGIFFilenameByIndex(const char *directoryName, int index, char *pnBuffer) {
+void getFilenameByIndex(const char *directoryName, int index, char *pnBuffer, const char *extension) {
 
   // Make sure index is in range
   if ((index < 0) || (index >= numberOfFiles))
@@ -81,19 +74,14 @@ void getGIFFilenameByIndex(const char *directoryName, int index, char *pnBuffer)
     file = directory.openNextFile();
     if (!file) break;
 
-    if (isAnimationFile(file.name())) {
+    if (isFileType(file.name(), extension)) {
       index--;
 
       // Copy the directory name into the pathname buffer
       strcpy(pnBuffer, directoryName);
 
-      //ESP32 SD Library includes the full path name in the filename, so no need to add the directory name
-#if defined(ESP32)
-      pnBuffer[0] = 0;
-#else
       int len = strlen(pnBuffer);
       if (len == 0 || pnBuffer[len - 1] != '/') strcat(pnBuffer, "/");
-#endif
 
       // Append the filename to the pathname
       strcat(pnBuffer, file.name());
@@ -106,10 +94,10 @@ void getGIFFilenameByIndex(const char *directoryName, int index, char *pnBuffer)
   directory.close();
 }
 
-int openGifFilenameByIndex(const char *directoryName, int index) {
+int openFilenameByIndex(const char *directoryName, int index, const char *extension) {
   char pathname[255];
 
-  getGIFFilenameByIndex(directoryName, index, pathname);
+  getFilenameByIndex(directoryName, index, pathname, extension);
 
   Serial.print("Pathname: ");
   Serial.println(pathname);
@@ -120,7 +108,7 @@ int openGifFilenameByIndex(const char *directoryName, int index) {
   // Attempt to open the file for reading
   file = SD.open(pathname);
   if (!file) {
-    Serial.println("Error opening GIF file");
+    Serial.println("Error opening file");
     return -1;
   }
 
@@ -129,8 +117,8 @@ int openGifFilenameByIndex(const char *directoryName, int index) {
 
 
 // Return a random animated gif path/filename from the specified directory
-void chooseRandomGIFFilename(const char *directoryName, char *pnBuffer) {
+// void chooseRandomGIFFilename(const char *directoryName, char *pnBuffer) {
 
-  int index = random(numberOfFiles);
-  getGIFFilenameByIndex(directoryName, index, pnBuffer);
-}
+//   int index = random(numberOfFiles);
+//   getGIFFilenameByIndex(directoryName, index, pnBuffer);
+// }
