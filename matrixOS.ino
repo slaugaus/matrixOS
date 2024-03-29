@@ -29,6 +29,7 @@
 // SDIO GLOBAL STUFF
 #include <SD.h>
 #include <PNGdec.h>
+#include <JPEGDEC.h>
 #include <GifDecoder.h>
 #include "FilenameFunctions.h"
 
@@ -41,7 +42,7 @@
 // Teensy SD Library requires a trailing slash in the directory name
 #define GIF_DIRECTORY "/gif/"
 #define PNG_DIRECTORY "/png/"
-#define JPEG_DIRECTORY "/jpg/"
+#define JPG_DIRECTORY "/jpg/"
 
 #define drawPrompt() cliDrawString(PROMPT, false)
 #define flushString(str) memset(str, 0, COMMAND_MAX_LENGTH)
@@ -91,9 +92,10 @@ uint8_t serialCommandBufferIdx = 0;
  * 
  * lzwMaxBits is included for backwards compatibility reasons, but isn't used anymore
  */
-GifDecoder<kMatrixWidth, kMatrixHeight, 12> decoder;
+GifDecoder<kMatrixWidth, kMatrixHeight, 12> gifDecoder;
 
 PNG png;
+JPEGDEC jpg;
 
 Screen *MainScreen = new Screen();
 
@@ -117,6 +119,8 @@ void gifPlayerLoop(int index);
 void rgbTask();
 int help(void * args);
 int cliGif(void * args);
+int cliPNG(void * args);
+int cliJPG(void * args);
 int echoText(void * args);
 int displayVersion(void * args);
 int clearScreen(void * args);
@@ -132,6 +136,8 @@ void setupCommands(void){
 
   appendCommand("help", "Displays Help Screen", help);
   appendCommand("gif", "Plays a .gif file from the SD card", cliGif);
+  appendCommand("png", "Displays a .png file from the SD card", cliPNG);
+  appendCommand("jpg", "Displays a .jpg file from the SD card", cliJPG);
   appendCommand("echo", "Echoes input to console", echoText);
   appendCommand("color", "changes text & bg colors (0 - f)", setColor);
   appendCommand("cls", "clears terminal output (Ctrl+L)", clearScreen); 
@@ -173,15 +179,15 @@ void setup() {
   // keyboard1.attachRawPress(OnRawPress);
   // keyboard1.attachRawRelease(OnRawRelease);
   // SDIO/GIF INIT STUFF
-  decoder.setScreenClearCallback(screenClearCallback);
-  decoder.setUpdateScreenCallback(updateScreenCallback);
-  decoder.setDrawPixelCallback(drawPixelCallback);
+  gifDecoder.setScreenClearCallback(screenClearCallback);
+  gifDecoder.setUpdateScreenCallback(updateScreenCallback);
+  gifDecoder.setDrawPixelCallback(drawPixelCallback);
 
-  decoder.setFileSeekCallback(fileSeekCallback);
-  decoder.setFilePositionCallback(filePositionCallback);
-  decoder.setFileReadCallback(fileReadCallback);
-  decoder.setFileReadBlockCallback(fileReadBlockCallback);
-  decoder.setFileSizeCallback(fileSizeCallback);
+  gifDecoder.setFileSeekCallback(fileSeekCallback);
+  gifDecoder.setFilePositionCallback(filePositionCallback);
+  gifDecoder.setFileReadCallback(fileReadCallback);
+  gifDecoder.setFileReadBlockCallback(fileReadBlockCallback);
+  gifDecoder.setFileSizeCallback(fileSizeCallback);
   
   setupCommands();
 
@@ -441,31 +447,95 @@ int enumerateFiles(const char *directoryName, bool displayFilenames, const char 
   return numberOfFiles;
 }
 
+// TODO: reduce repetition in image loaders
+int cliPNG(void * args) {
+  char **tokens = (char**) args;
+  int num_files = enumerateFiles(PNG_DIRECTORY, true, ".PNG");
+  if (num_files < 0) {
+    cliDrawString("No png directory on SD card, or SD disconnected.");
+    return 1;
+  }
+
+  // No file number, just display files
+  if (!tokens[1]) return 0;
+
+  int idx = atoi(tokens[1]);
+  if (idx > num_files || idx <= 0) {
+    cliDrawString("Invalid file number.");
+    return 1;
+  }
+
+  // NOTE: This clears textLayer. Something with swapBuffers may allow "saving" it?
+  textLayer.fillScreen(0);
+  textLayer.swapBuffers();
+
+  imgViewerLoop(--idx, 'p');
+  // on viewer exit...
+  gfxLayer.fillScreen(bcolor2);
+  gfxLayer.swapBuffers();
+  clearScreen(NULL);
+
+  return 0;
+}
+
+// TODO: reduce repetition in image loaders
+int cliJPG(void * args) {
+  char **tokens = (char**) args;
+  int num_files = enumerateFiles(JPG_DIRECTORY, true, ".JPG");
+  if (num_files < 0) {
+    cliDrawString("No jpg directory on SD card, or SD disconnected.");
+    return 1;
+  }
+
+  // No file number, just display files
+  if (!tokens[1]) return 0;
+
+  int idx = atoi(tokens[1]);
+  if (idx > num_files || idx <= 0) {
+    cliDrawString("Invalid file number.");
+    return 1;
+  }
+
+  // NOTE: This clears textLayer. Something with swapBuffers may allow "saving" it?
+  textLayer.fillScreen(0);
+  textLayer.swapBuffers();
+
+  imgViewerLoop(--idx, 'j');
+  // on viewer exit...
+  gfxLayer.fillScreen(bcolor2);
+  gfxLayer.swapBuffers();
+  clearScreen(NULL);
+
+  return 0;
+}
+
 int cliGif(void* args) {
   char **tokens = (char**) args;
   int num_files = enumerateFiles(GIF_DIRECTORY, true, ".GIF");
   if (num_files < 0) {
-    cliDrawString("No gif directory on SD card.");
+    cliDrawString("No gif directory on SD card, or SD disconnected.");
     return 1;
   }
-  if (tokens[1]) {
-    int idx = atoi(tokens[1]);
-    if (idx > num_files || idx <= 0) {
-      cliDrawString("Invalid file number.");
-      return 1;
-    }
-    // inCLI = false;
-    // NOTE: This clears textLayer.
-    // There doesn't seem to be a way to temporarily hide it.
-    textLayer.fillScreen(0);
-    textLayer.swapBuffers();
-    // threads.addThread(gifPlayerLoop, idx);
-    gifPlayerLoop(--idx);
-    // on player exit...
-    gfxLayer.fillScreen(bcolor2);
-    gfxLayer.swapBuffers();
-    clearScreen(NULL);
+
+  // No file number, just display files
+  if (!tokens[1]) return 0;
+
+  int idx = atoi(tokens[1]);
+  if (idx > num_files || idx <= 0) {
+    cliDrawString("Invalid file number.");
+    return 1;
   }
+  // inCLI = false;
+  // NOTE: This clears textLayer. Something with swapBuffers may allow "saving" it?
+  textLayer.fillScreen(0);
+  textLayer.swapBuffers();
+  // threads.addThread(gifPlayerLoop, idx);
+  gifPlayerLoop(--idx);
+  // on player exit...
+  gfxLayer.fillScreen(bcolor2);
+  gfxLayer.swapBuffers();
+  clearScreen(NULL);
+
   return 0;
 }
 
@@ -504,6 +574,69 @@ void OnPress(int key) {
 }
 
 // SDIO FUNCTIONS
+// PNG/JPG STUFF
+
+void pngDraw(PNGDRAW *pDraw){
+  // TODO: SCALE IMAGE DOWN SOMEHOW & GET MAX COLOR DEPTH
+  uint16_t pngPixels[kMatrixWidth];
+  png.getLineAsRGB565(pDraw, pngPixels, PNG_RGB565_LITTLE_ENDIAN, 0xffffffff);
+
+  rgb16 color565;
+  for (int x = 0; x < kMatrixWidth; x++){
+    color565 = pngPixels[x];
+    gfxLayer.drawPixel(x, pDraw->y, color565);
+  }
+}
+
+// Unlike pngDraw, this gets called every 8(?) rows...  (probably something about JPEG format)
+void jpgDraw(JPEGDRAW *pDraw){
+  rgb16 color565;
+  for (int y = 0; y < pDraw->iHeight; y++){
+    for (int x = 0; x < pDraw->iWidth; x++){
+      // pPixels is 8 rows in 1 continuous array; offset x coord accordingly
+      color565 = pDraw->pPixels[x + (y*pDraw->iWidth)];
+      gfxLayer.drawPixel(x, y+pDraw->y, color565);
+    }
+  }
+}
+
+void imgViewerLoop(int index, char filetype){
+  // inCLI = false;
+  // Serial.println("IMG Loop Entered");
+  // static unsigned long displayStartTime_millis;
+  // unsigned long now = millis();
+  char imgPath[256] = "";
+  // TODO: probably easy to lower the repetition
+  switch(filetype){
+    case 'p':
+      getFilenameByIndex(PNG_DIRECTORY, index, imgPath, ".PNG");
+      
+      // Serial.println("Start drawing png");
+      if (!png.open((const char *) imgPath, bankOpen, bankClose, bankRead, bankSeek, pngDraw)) {
+        // Serial.printf("image specs: (%d x %d), %d bpp, pixel type: %d\n", png.getWidth(), png.getHeight(), png.getBpp(), png.getPixelType());
+        png.decode(NULL, 0);
+        png.close();
+      } else return;
+      break;
+
+    case 'j': {
+      getFilenameByIndex(JPG_DIRECTORY, index, imgPath, ".JPG");
+      if (jpg.open((const char *) imgPath, bankOpen, bankClose, bankRead, bankSeek, jpgDraw)) {
+        // Serial.printf("image specs: (%d x %d), %d bpp, pixel type: %d\n", png.getWidth(), png.getHeight(), png.getBpp(), png.getPixelType());
+        jpg.decode(0, 0, NULL);
+        jpg.close();
+      } else return;
+      break;
+    }
+  }
+
+  gfxLayer.swapBuffers();
+
+  while (!checkExitSignal()); // wait for Esc
+}
+
+
+// GIF STUFF
 void screenClearCallback(void) {
   gfxLayer.fillScreen(bcolor2);
 }
@@ -513,6 +646,8 @@ void updateScreenCallback(void) {
   // gfxLayer.swapBuffers();
   // // return;
 }
+
+// Currently unused. TODO: Somehow determine the transparency of the GIF and set this as the callback
 void updateScreenTransparentCallback(void) {
   gfxLayer.swapBuffers();
   gfxLayer.fillScreen(bcolor2);
@@ -527,22 +662,22 @@ void drawPixelCallback(int16_t x, int16_t y, uint8_t red, uint8_t green, uint8_t
 // APP THREADS
 void gifPlayerLoop(int index) {
   // inCLI = false;
-  Serial.println("GIF Loop Entered");
-  static unsigned long displayStartTime_millis;
-  unsigned long now = millis();
+  // Serial.println("GIF Loop Entered");
+  // static unsigned long displayStartTime_millis;
+  // unsigned long now = millis();
   // matrix.addLayer(&gfxLayer);
   
   if (openFilenameByIndex(GIF_DIRECTORY, index, ".GIF") >= 0) {
-    if (decoder.startDecoding() < 0) {
-      Serial.println("Decoder broke for some reason");
+    if (gifDecoder.startDecoding() < 0) {
+      Serial.println("gifDecoder broke for some reason");
       return;
     }
-    displayStartTime_millis = now;
-  }
+    // displayStartTime_millis = now;
+  } else return;
 
   while (!checkExitSignal()) {  // TODO: Exit after finished playing or loop
     // Decoder uses callbacks to draw the GIF
-    if (decoder.decodeFrame() < 0) {
+    if (gifDecoder.decodeFrame() < 0) {
       // There's an error with this GIF, go to the next one
       Serial.println("GIF Problem");
       return;

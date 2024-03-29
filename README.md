@@ -21,6 +21,11 @@ Teensy built-in libraries, notably [USBHost_t36](https://github.com/PaulStoffreg
 
 ## Known Limitations
 
+### Image Viewers
+* PNGs get squashed to 16-bit color (RGB565) despite the format and libraries supporting better depths.
+* JPEG files must have the extension `.jpg` (for now).
+* Images larger than the screen resolution are not scaled to fit and may crash the system.
+
 ### GIF Playback
 * Not all files will successfully load, notably GIFs with interleaved frames (per [GifDecoder](https://github.com/pixelmatix/GifDecoder) docs). Files made with [gifski](gif.ski)'s default settings are recommended and confirmed working.
 * Transparent GIFs are not handled correctly; work around this by adding a black background to the file.

@@ -62,6 +62,7 @@ bool isFileType(const char filename[], const char extension[]) {
 // Get the full path/filename of the GIF file with specified index
 void getFilenameByIndex(const char *directoryName, int index, char *pnBuffer, const char *extension) {
 
+  // Serial.printf("(get)  Dir: %s\tExt: %s\tIdx: %d\n", directoryName, extension, index);
   // Make sure index is in range
   if ((index < 0) || (index >= numberOfFiles))
     return;
@@ -70,11 +71,15 @@ void getFilenameByIndex(const char *directoryName, int index, char *pnBuffer, co
   if (!directory)
     return;
 
+  // Serial.println("Dir opened");
+
   while ((index >= 0)) {
+    // Serial.printf("Opening %d\n", index);
     file = directory.openNextFile();
     if (!file) break;
 
     if (isFileType(file.name(), extension)) {
+      // Serial.printf("%s Is a %s\n", file.name(), extension);
       index--;
 
       // Copy the directory name into the pathname buffer
@@ -97,10 +102,12 @@ void getFilenameByIndex(const char *directoryName, int index, char *pnBuffer, co
 int openFilenameByIndex(const char *directoryName, int index, const char *extension) {
   char pathname[255];
 
+  // Serial.printf("(open) Dir: %s\tExt: %s\tIdx: %d\n", directoryName, extension, index);
+
   getFilenameByIndex(directoryName, index, pathname, extension);
 
-  Serial.print("Pathname: ");
-  Serial.println(pathname);
+  // Serial.print("Pathname: ");
+  // Serial.println(pathname);
 
   if (file)
     file.close();
@@ -108,11 +115,33 @@ int openFilenameByIndex(const char *directoryName, int index, const char *extens
   // Attempt to open the file for reading
   file = SD.open(pathname);
   if (!file) {
-    Serial.println("Error opening file");
+    // Serial.println("Error opening file");
     return -1;
   }
 
   return 0;
+}
+
+// Callbacks for PNGDec and JPEGDec (Larry Bank's libs)
+void * bankOpen(const char *filename, int32_t *size){
+  // Serial.printf("Attempting to open %s\n", filename);
+  file = SD.open(filename);
+  *size = file.size();
+  return &file;
+}
+
+void bankClose(void *handle){
+  if (file) file.close();
+}
+
+int32_t bankRead(void *handle, uint8_t *buf, int32_t length){
+  if (!file) return 0;
+  return file.read(buf, length);
+}
+
+int32_t bankSeek(void *handle, int32_t pos){
+  if (!file) return 0;
+  return file.seek(pos);
 }
 
 

@@ -29,6 +29,8 @@
 #ifndef FILENAME_FUNCTIONS_H
 #define FILENAME_FUNCTIONS_H
 
+#include <cstdint>
+
 void getFilenameByIndex(const char *directoryName, int index, char *pnBuffer, const char *extension);
 int openFilenameByIndex(const char *directoryName, int index, const char *extension);
 int initFileSystem(int chipSelectPin);
@@ -40,6 +42,13 @@ unsigned long filePositionCallback(void);
 int fileReadCallback(void);
 int fileReadBlockCallback(void *buffer, int numberOfBytes);
 int fileSizeCallback(void);
+
+// Callbacks for PNGDec and JPEGDec (Larry Bank's libs)
+void * bankOpen(const char *filename, int32_t *size);
+void bankClose(void *handle);
+int32_t bankRead(void *handle, uint8_t *buf, int32_t length);
+int32_t bankSeek(void *handle, int32_t pos);
+
 
 extern int numberOfFiles;
 #include <SD.h>
