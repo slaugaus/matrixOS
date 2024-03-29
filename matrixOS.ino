@@ -14,7 +14,7 @@
                                                                              
 ********************************************************************************/
 
-#include <TeensyThreads.h>
+// #include <TeensyThreads.h>
 #include <string.h>
 #include <stdio.h>
 #include "screen.h"
@@ -22,9 +22,10 @@
 #include "signals.h"
 #include "getColor.h"
 // KEYBOARD/CLI GLOBAL STUFF
-#include "USBHost_t36.h"
+#include <USBHost_t36.h>
 #include "KeyboardUtils.h"
 #include "HelpStrings.h"
+#include "rainbow.h"
 // SDIO GLOBAL STUFF
 #include <SD.h>
 #include <PNGdec.h>
@@ -35,17 +36,20 @@
 #define COMMAND_TOKEN_LIMIT 8
 #define COMMAND_MAX_LENGTH 128
 #define PROMPT "> "
-#define DRAW_PROMPT cliDrawString(PROMPT, false)
 // Chip select for SD card
 #define SD_CS BUILTIN_SDCARD
 // Teensy SD Library requires a trailing slash in the directory name
 #define GIF_DIRECTORY "/gif/"
 #define PNG_DIRECTORY "/png/"
-#define JPEG_DIRECTORY "/jpeg/"
+#define JPEG_DIRECTORY "/jpg/"
+
+#define drawPrompt() cliDrawString(PROMPT, false)
 #define flushString(str) memset(str, 0, COMMAND_MAX_LENGTH)
 
-// set false if another app needs buffer control
-bool inCLI = true;
+// set false if another app needs buffer control?
+// bool inCLI = true;
+bool runRGB = false;
+int rgbIdx = 0;
 
 // Processed macros to make a refactor easier, maybe
 // SMARTMATRIX_ALLOCATE_BUFFERS(matrix, kMatrixWidth, kMatrixHeight, kRefreshDepth, kDmaBufferRows, kPanelType, kMatrixOptions);
@@ -102,9 +106,7 @@ void setCursor(int x, int y);
 void cliDrawChar(char chr);
 void cliDrawString(const char* text, bool newLine = true);
 void parseCommand(char text[]);
-void help(char *tokens[]);
 int enumerateFiles(const char *directoryName, bool displayFilenames);
-void cliGif(char *tokens[]);
 void invalidCommand(char token[]);
 void routeKbSpecial(nonCharsAndShortcuts key);
 void OnPress(int key);
@@ -112,82 +114,16 @@ void screenClearCallback(void);
 void updateScreenCallback(void);
 void drawPixelCallback(int16_t x, int16_t y, uint8_t red, uint8_t green, uint8_t blue);
 void gifPlayerLoop(int index);
-
-// Teensy register-level hack to restart the program (like a power cycle or Arduino reset button)
-int cpuRestart(void * args) { ( *((uint32_t *)0xE000ED0C) = 0x5FA0004); return 0; }
-
-int displayVersion(void * args){
-  cliDrawString("matrixOS [Version 1.0.0.0]");
-  cliDrawString("(c) 2024 Austin S., CJ B., Jacob D.");
-  return 0;
-}
-
-int clearScreen(void * args){
-    textLayer.fillScreen(0);
-    
-    textLayer.swapBuffers();
-    setCursor(0, 0);
-
-    return 0;
-}
-
-int echoText(void * args){
-  char ** arguments = (char**) args;
-  while (*(++arguments)){
-    cliDrawString(*arguments, false);
-    cliDrawString(" ", false);
-  }
-  cursorNewline();
-  return 0;
-}
-
-
-int setColor(void * args){
-  char ** arguments = (char**) args;
-  if (!arguments[1]){
-    cliDrawString("No Color Provided");
-    return 1;
-  }
-  rgb24 fcolor;
-  rgb24 bcolor;
-  char background = arguments[1][0];
-  char foreground;
-  bool both = (bool) arguments[1][1];
-  if (!both)
-    foreground = background;
-  else
-    foreground = arguments[1][1];
-
-
-
-  fcolor = getColor(foreground);
-  bool invalid = invalidColor;
-  if (both){
-    bcolor = getColor(background);
-    invalid = invalid || invalidColor;
-  }
-  else{
-    if (fcolor.red == bcolor2.red && fcolor.green == bcolor2.green && fcolor.blue == bcolor2.blue){
-      invalid = true;
-    }
-  }
-
-
-  if (!invalid && (fcolor.red != bcolor.red || fcolor.green != bcolor.green || fcolor.blue != bcolor.blue)){
-    fcolor2 = fcolor;
-    textLayer.setIndexedColor(1, fcolor);
-    if (both){
-      bcolor2 = bcolor;
-      gfxLayer.fillScreen(bcolor);
-      gfxLayer.swapBuffers();
-    }
-    return 0;
-  }
-  else{
-    cliDrawString("Invalid Color");
-  }
-    return 0;
-}
+void rgbTask();
+int help(void * args);
+int cliGif(void * args);
+int echoText(void * args);
+int displayVersion(void * args);
+int clearScreen(void * args);
+int setColor(void * args);
+int cpuRestart(void * args);
+int bright(void * args);
+int cliRGB(void * args);
 
 void setupCommands(void){
   if (!initCMDTable(100)){
@@ -201,10 +137,10 @@ void setupCommands(void){
   appendCommand("cls", "clears terminal output (Ctrl+L)", clearScreen); 
   appendCommand("ver", "displays current version", displayVersion);
   appendCommand("reset", "resets the system (Ctrl+Alt+Del)", cpuRestart);
+  appendCommand("bright", "changes the global brightness (10-255)", bright);
+  appendCommand("rgb", "toggles RGB text mode", cliRGB);
 
-  return;
 }
-
 
 void setup() {
   // wait 1 sec for Arduino Serial Monitor
@@ -250,10 +186,10 @@ void setup() {
   setupCommands();
 
   if (initFileSystem(SD_CS) < 0) {
-    cliDrawString("No SD card found. Try restarting.");
+    cliDrawString("No SD card found. Check the adapter's wiring or try restarting.");
   }
 
-  DRAW_PROMPT;
+  drawPrompt();
 }
 
 void loop() {
@@ -261,6 +197,11 @@ void loop() {
   // Everything else should be a TeensyThread... eventually
   // clear screen
   // backgroundLayer.fillScreen(defaultBackgroundColor);
+
+  if (runRGB){
+    textLayer.setIndexedColor(1, rainbowColors[rgbIdx++]);
+    if (rgbIdx >= RAINBOW_STEPS) rgbIdx = 0; // 0-1529
+  }
   
   if (isCommandAvailable()){
       parseCommand(commandBuffer);
@@ -423,7 +364,7 @@ void parseCommand(char text[]) {
   }
 
 
-  DRAW_PROMPT;
+  drawPrompt();
   Serial.println("Parse end");
 }
 
@@ -513,7 +454,7 @@ int cliGif(void* args) {
       cliDrawString("Invalid file number.");
       return 1;
     }
-    inCLI = false;
+    // inCLI = false;
     // NOTE: This clears textLayer.
     // There doesn't seem to be a way to temporarily hide it.
     textLayer.fillScreen(0);
@@ -607,4 +548,117 @@ void gifPlayerLoop(int index) {
       return;
     }
   }
+}
+
+// Teensy register-level hack to restart the program (like a power cycle or Arduino reset button)
+int cpuRestart(void * args) { ( *((uint32_t *)0xE000ED0C) = 0x5FA0004); return 0; }
+
+int displayVersion(void * args){
+  cliDrawString("matrixOS [Version 1.0.0.0]");
+  cliDrawString("(c) 2024 Austin S., CJ B., Jacob D.");
+  return 0;
+}
+
+int clearScreen(void * args){
+    textLayer.fillScreen(0);
+    
+    textLayer.swapBuffers();
+    setCursor(0, 0);
+
+    return 0;
+}
+
+int echoText(void * args){
+  char ** arguments = (char**) args;
+  while (*(++arguments)){
+    cliDrawString(*arguments, false);
+    cliDrawString(" ", false);
+  }
+  cursorNewline();
+  return 0;
+}
+
+
+int setColor(void * args){
+  char ** arguments = (char**) args;
+  if (!arguments[1]){
+    cliDrawString("No Color Provided");
+    return 1;
+  }
+  rgb24 fcolor;
+  rgb24 bcolor;
+  char background = arguments[1][0];
+  char foreground;
+  bool both = (bool) arguments[1][1];
+  if (!both)
+    foreground = background;
+  else
+    foreground = arguments[1][1];
+
+
+
+  fcolor = getColor(foreground);
+  bool invalid = invalidColor;
+  if (both){
+    bcolor = getColor(background);
+    invalid = invalid || invalidColor;
+  }
+  else{
+    if (fcolor.red == bcolor2.red && fcolor.green == bcolor2.green && fcolor.blue == bcolor2.blue){
+      invalid = true;
+    }
+  }
+
+
+  if (!invalid && (fcolor.red != bcolor.red || fcolor.green != bcolor.green || fcolor.blue != bcolor.blue)){
+    fcolor2 = fcolor;
+    textLayer.setIndexedColor(1, fcolor);
+    if (both){
+      bcolor2 = bcolor;
+      gfxLayer.fillScreen(bcolor);
+      gfxLayer.swapBuffers();
+    }
+    return 0;
+  }
+  else{
+    cliDrawString("Invalid Color");
+  }
+    return 0;
+}
+
+int bright(void * args){
+  char ** arguments = (char**) args;
+  if (!arguments[1]){
+    cliDrawString("No brightness specified, resetting to 255");
+    matrix.setBrightness(255);
+    MainScreen->matrixBrightness = 255;
+    return 0;
+  }
+
+  int arg1 = atoi(arguments[1]);
+
+  if (arg1 < 10) {
+    cliDrawString("Too low, setting to 10");
+    arg1 = 10;
+  }
+  else if (arg1 > 255) {
+    cliDrawString("Too high, setting to 255");
+    arg1 = 255;
+  }
+
+  matrix.setBrightness(arg1);
+  MainScreen->matrixBrightness = arg1;
+
+  return 0;
+}
+
+int cliRGB(void * args) {
+  runRGB = !runRGB;
+  if (runRGB)
+    cliDrawString("TASTE THE RAINBOW");
+  else {
+    cliDrawString("No longer tasting the rainbow");
+    textLayer.setIndexedColor(1, fcolor2);
+  }
+  return 0;
 }
