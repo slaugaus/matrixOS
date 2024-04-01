@@ -43,6 +43,7 @@
 #define GIF_DIRECTORY "/gif/"
 #define PNG_DIRECTORY "/png/"
 #define JPG_DIRECTORY "/jpg/"
+#define SLIDES_DIRECTORY "/slides/"
 
 #define drawPrompt() cliDrawString(PROMPT, false)
 #define flushString(str) memset(str, 0, COMMAND_MAX_LENGTH)
@@ -54,7 +55,7 @@ int rgbIdx = 0;
 
 // Processed macros to make a refactor easier, maybe
 // SMARTMATRIX_ALLOCATE_BUFFERS(matrix, kMatrixWidth, kMatrixHeight, kRefreshDepth, kDmaBufferRows, kPanelType, kMatrixOptions);
-static volatile __attribute__ ((section(".dmabuffers"), used)) SmartMatrixRefreshT4<kRefreshDepth, kMatrixWidth, kMatrixHeight, kPanelType, kMatrixOptions>::rowDataStruct rowsDataBuffer[kDmaBufferRows];
+static volatile __attribute__((section(".dmabuffers"), used)) SmartMatrixRefreshT4<kRefreshDepth, kMatrixWidth, kMatrixHeight, kPanelType, kMatrixOptions>::rowDataStruct rowsDataBuffer[kDmaBufferRows];
 SmartMatrixRefreshT4<kRefreshDepth, kMatrixWidth, kMatrixHeight, kPanelType, kMatrixOptions> matrixRefresh(kDmaBufferRows, rowsDataBuffer);
 SmartMatrixHub75Calc<kRefreshDepth, kMatrixWidth, kMatrixHeight, kPanelType, kMatrixOptions> matrix(kDmaBufferRows, rowsDataBuffer);
 
@@ -62,7 +63,7 @@ SmartMatrixHub75Calc<kRefreshDepth, kMatrixWidth, kMatrixHeight, kPanelType, kMa
 
 // SMARTMATRIX_ALLOCATE_BACKGROUND_LAYER(gfxLayer, kMatrixWidth, kMatrixHeight, COLOR_DEPTH, kBackgroundLayerOptions);
 typedef rgb24 SM_RGB;
-static rgb24 gfxLayerBitmap[2*kMatrixWidth*kMatrixHeight];
+static rgb24 gfxLayerBitmap[2 * kMatrixWidth * kMatrixHeight];
 static uint16_t gfxLayercolorCorrectionLUT[sizeof(SM_RGB) <= 3 ? 256 : 4096];
 static SMLayerBackground<rgb24, kBackgroundLayerOptions> gfxLayer(gfxLayerBitmap, kMatrixWidth, kMatrixHeight, gfxLayercolorCorrectionLUT);
 
@@ -72,8 +73,8 @@ static uint8_t textLayerBitmap[2 * kMatrixWidth * (kMatrixHeight / 8)];
 static SMLayerIndexed<rgb24, kIndexedLayerOptions> textLayer(textLayerBitmap, kMatrixWidth, kMatrixHeight);
 
 // Global colors for foreground and background
-static rgb24 fcolor2 =  {255, 255, 255};
-static rgb24 bcolor2  = {0, 0, 0};
+static rgb24 fcolor2 = { 255, 255, 255 };
+static rgb24 bcolor2 = { 0, 0, 0 };
 
 USBHost myusb;
 KeyboardController keyboard1(myusb);
@@ -106,7 +107,7 @@ void advanceCursor();
 void moveCursor(int dx, int dy);
 void setCursor(int x, int y);
 void cliDrawChar(char chr);
-void cliDrawString(const char* text, bool newLine = true);
+void cliDrawString(const char *text, bool newLine = true);
 void parseCommand(char text[]);
 int enumerateFiles(const char *directoryName, bool displayFilenames);
 void invalidCommand(char token[]);
@@ -117,42 +118,45 @@ void updateScreenCallback(void);
 void drawPixelCallback(int16_t x, int16_t y, uint8_t red, uint8_t green, uint8_t blue);
 void gifPlayerLoop(int index);
 void rgbTask();
-int help(void * args);
-int cliGif(void * args);
-int cliPNG(void * args);
-int cliJPG(void * args);
-int echoText(void * args);
-int displayVersion(void * args);
-int clearScreen(void * args);
-int setColor(void * args);
-int cpuRestart(void * args);
-int bright(void * args);
-int cliRGB(void * args);
+int help(void *args);
+int cliGif(void *args);
+int cliPNG(void *args);
+int cliJPG(void *args);
+int slides(void *args);
+int echoText(void *args);
+int displayVersion(void *args);
+int clearScreen(void *args);
+int setColor(void *args);
+int cpuRestart(void *args);
+int bright(void *args);
+int cliRGB(void *args);
+void drawPNGByIndex(const char *baseDir, int index);
 
-void setupCommands(void){
-  if (!initCMDTable(100)){
+void setupCommands(void) {
+  if (!initCMDTable(100)) {
     cliDrawString("Command Table Initialization Failed");
   }
 
-  appendCommand("help", "Displays Help Screen", help);
-  appendCommand("gif", "Plays a .gif file from the SD card", cliGif);
-  appendCommand("png", "Displays a .png file from the SD card", cliPNG);
-  appendCommand("jpg", "Displays a .jpg file from the SD card", cliJPG);
-  appendCommand("echo", "Echoes input to console", echoText);
-  appendCommand("color", "changes text & bg colors (0 - f)", setColor);
-  appendCommand("cls", "clears terminal output (Ctrl+L)", clearScreen); 
+  appendCommand("help", "displays this help screen", help);
+  appendCommand("gif", "plays a .gif file from the SD card", cliGif);
+  appendCommand("png", "displays a .png file from the SD card", cliPNG);
+  appendCommand("jpg", "displays a .jpg file from the SD card", cliJPG);
+  appendCommand("slides", "plays the slideshow on the SD card (arg1=delay in ms, arg2=no loop)", slides);
+  appendCommand("echo", "echoes input to console", echoText);
+  appendCommand("color", "changes text & bg colors (01-FE like cmd/DOS)", setColor);
+  appendCommand("cls", "clears terminal output (Ctrl+L)", clearScreen);
   appendCommand("ver", "displays current version", displayVersion);
   appendCommand("reset", "resets the system (Ctrl+Alt+Del)", cpuRestart);
   appendCommand("bright", "changes the global brightness (10-255)", bright);
   appendCommand("rgb", "toggles RGB text mode", cliRGB);
-
 }
 
 void setup() {
   // wait 1 sec for Arduino Serial Monitor
   // Serial.begin();
   // unsigned long start = millis();
-  while (!Serial && millis() < 1000);
+  while (!Serial && millis() < 1000)
+    ;
 
   Serial.println("\n\n### matrixOS Serial Console ###\n");
   // MATRIX INIT STUFF
@@ -188,7 +192,7 @@ void setup() {
   gifDecoder.setFileReadCallback(fileReadCallback);
   gifDecoder.setFileReadBlockCallback(fileReadBlockCallback);
   gifDecoder.setFileSizeCallback(fileSizeCallback);
-  
+
   setupCommands();
 
   if (initFileSystem(SD_CS) < 0) {
@@ -204,20 +208,20 @@ void loop() {
   // clear screen
   // backgroundLayer.fillScreen(defaultBackgroundColor);
 
-  if (runRGB){
+  if (runRGB) {
     textLayer.setIndexedColor(1, rainbowColors[rgbIdx++]);
-    if (rgbIdx >= RAINBOW_STEPS) rgbIdx = 0; // 0-1529
+    if (rgbIdx >= RAINBOW_STEPS) rgbIdx = 0;  // 0-1529
   }
-  
-  if (isCommandAvailable()){
-      parseCommand(commandBuffer);
-      Serial.println("Flush buffer");
-      flushString(commandBuffer);
-      commandBufferIdx = 0;
+
+  if (isCommandAvailable()) {
+    parseCommand(commandBuffer);
+    Serial.println("Flush buffer");
+    flushString(commandBuffer);
+    commandBufferIdx = 0;
   }
 
   // if (inCLI == true)
-    textLayer.swapBuffers();
+  textLayer.swapBuffers();
 }
 
 /*
@@ -278,8 +282,8 @@ void cursorBackspace() {
   }
 
   // erase pixels of erased character
-  for (int x = 0; x < CHAR_WIDTH; x++){
-    for (int y = 0; y < CHAR_HEIGHT; y++){
+  for (int x = 0; x < CHAR_WIDTH; x++) {
+    for (int y = 0; y < CHAR_HEIGHT; y++) {
       textLayer.drawPixel(MainScreen->termCursorX + x, MainScreen->termCursorY + y, 0);
     }
   }
@@ -313,7 +317,7 @@ void cliDrawChar(char chr) {
   advanceCursor();
 }
 
-void cliDrawString(const char* text, bool newLine = true) {
+void cliDrawString(const char *text, bool newLine = true) {
   int offset = 0;
   char character;
   // iterate through string
@@ -346,25 +350,23 @@ void parseCommand(char text[]) {
   Serial.print(tokens[0]);
   Serial.println(" is tokens 0");
 
-  Command * command = getCommand(tokens[0]);
+  Command *command = getCommand(tokens[0]);
 
   Serial.println("Command got");
 
-  if (command){
-    if (tokens[1] && !strcmp("/?", tokens[1])){
+  if (command) {
+    if (tokens[1] && !strcmp("/?", tokens[1])) {
       cliDrawString(command->helpInfo);
       return;
     }
     Serial.println("Command exists");
-    if (command->function){
+    if (command->function) {
       command->function(tokens);
-    }
-    else{
+    } else {
       Serial.println("Command exists, but has no function");
       cliDrawString("Command exists, but has no function");
     }
-  }
-  else{
+  } else {
     Serial.println("Command not found");
     invalidCommand(tokens[0]);
   }
@@ -375,26 +377,26 @@ void parseCommand(char text[]) {
 }
 
 // For assigning commands to keyboard shortcuts
-void fakeCommand(const char *cmd){
-  strncpy(commandBuffer, cmd, COMMAND_MAX_LENGTH-1);  // -1 to preserve null terminator?
+void fakeCommand(const char *cmd) {
+  strncpy(commandBuffer, cmd, COMMAND_MAX_LENGTH - 1);  // -1 to preserve null terminator?
   raiseCommandFlag();
 }
 
-void DisplayHelp(Command * command){
+void DisplayHelp(Command *command) {
   cliDrawString(command->title, false);
   cliDrawString(" - ", false);
   cliDrawString(command->helpInfo);
 }
 
-void ListCommands(void){
+void ListCommands(void) {
   unsigned long size = getTableSize();
-  Command ** table = getTable();
-  Command * cursor = NULL;
-  for (unsigned long i = 0; i < size; i++){
-    if (table[i] != NULL){
+  Command **table = getTable();
+  Command *cursor = NULL;
+  for (unsigned long i = 0; i < size; i++) {
+    if (table[i] != NULL) {
       cursor = table[i];
       DisplayHelp(cursor);
-      while (cursor->next){
+      while (cursor->next) {
         cursor = cursor->next;
         DisplayHelp(cursor);
       }
@@ -402,8 +404,8 @@ void ListCommands(void){
   }
 }
 
-int help(void * args) {
-  char **tokens = (char**) args;
+int help(void *args) {
+  char **tokens = (char **)args;
   Serial.println("Help entered");
   if (!tokens[1]) {
     // cliDrawString(COMMANDS_AVAILABLE);
@@ -411,11 +413,10 @@ int help(void * args) {
   } else if (!strcmp(tokens[1], "help")) {
     cliDrawString("Oh you think you're funny do ya?");
   } else {
-    Command * cmd = getCommand(tokens[1]);
-    if (cmd){
+    Command *cmd = getCommand(tokens[1]);
+    if (cmd) {
       DisplayHelp(cmd);
-    }
-    else
+    } else
       invalidCommand(tokens[1]);
   }
   return 0;
@@ -448,10 +449,10 @@ int enumerateFiles(const char *directoryName, bool displayFilenames, const char 
 }
 
 // TODO: reduce repetition in image loaders
-int cliPNG(void * args) {
-  char **tokens = (char**) args;
-  int num_files = enumerateFiles(PNG_DIRECTORY, true, ".PNG");
-  if (num_files < 0) {
+int cliPNG(void *args) {
+  char **tokens = (char **)args;
+  int numFiles = enumerateFiles(PNG_DIRECTORY, true, ".PNG");
+  if (numFiles < 0) {
     cliDrawString("No png directory on SD card, or SD disconnected.");
     return 1;
   }
@@ -460,7 +461,7 @@ int cliPNG(void * args) {
   if (!tokens[1]) return 0;
 
   int idx = atoi(tokens[1]);
-  if (idx > num_files || idx <= 0) {
+  if (idx > numFiles || idx <= 0) {
     cliDrawString("Invalid file number.");
     return 1;
   }
@@ -479,10 +480,10 @@ int cliPNG(void * args) {
 }
 
 // TODO: reduce repetition in image loaders
-int cliJPG(void * args) {
-  char **tokens = (char**) args;
-  int num_files = enumerateFiles(JPG_DIRECTORY, true, ".JPG");
-  if (num_files < 0) {
+int cliJPG(void *args) {
+  char **tokens = (char **)args;
+  int numFiles = enumerateFiles(JPG_DIRECTORY, true, ".JPG");
+  if (numFiles < 0) {
     cliDrawString("No jpg directory on SD card, or SD disconnected.");
     return 1;
   }
@@ -491,7 +492,7 @@ int cliJPG(void * args) {
   if (!tokens[1]) return 0;
 
   int idx = atoi(tokens[1]);
-  if (idx > num_files || idx <= 0) {
+  if (idx > numFiles || idx <= 0) {
     cliDrawString("Invalid file number.");
     return 1;
   }
@@ -509,10 +510,10 @@ int cliJPG(void * args) {
   return 0;
 }
 
-int cliGif(void* args) {
-  char **tokens = (char**) args;
-  int num_files = enumerateFiles(GIF_DIRECTORY, true, ".GIF");
-  if (num_files < 0) {
+int cliGif(void *args) {
+  char **tokens = (char **)args;
+  int numFiles = enumerateFiles(GIF_DIRECTORY, true, ".GIF");
+  if (numFiles < 0) {
     cliDrawString("No gif directory on SD card, or SD disconnected.");
     return 1;
   }
@@ -521,7 +522,7 @@ int cliGif(void* args) {
   if (!tokens[1]) return 0;
 
   int idx = atoi(tokens[1]);
-  if (idx > num_files || idx <= 0) {
+  if (idx > numFiles || idx <= 0) {
     cliDrawString("Invalid file number.");
     return 1;
   }
@@ -531,6 +532,50 @@ int cliGif(void* args) {
   textLayer.swapBuffers();
   // threads.addThread(gifPlayerLoop, idx);
   gifPlayerLoop(--idx);
+  // on player exit...
+  gfxLayer.fillScreen(bcolor2);
+  gfxLayer.swapBuffers();
+  clearScreen(NULL);
+
+  return 0;
+}
+
+int slides(void *args) {
+  char **tokens = (char **)args;
+  int numFiles = enumerateFiles(SLIDES_DIRECTORY, false, ".PNG");
+  if (numFiles < 0) {
+    cliDrawString("No slides directory on SD card, or SD disconnected.");
+    return 1;
+  }
+
+  int slideDelayMs = 5000;
+  bool loop = true;
+
+  // read user-specified slide delay if available
+  if (tokens[1]) {
+    slideDelayMs = atoi(tokens[1]);
+  }
+
+  if (tokens[2]) {
+    loop = false;
+  }
+
+  // NOTE: This clears textLayer. Something with swapBuffers may allow "saving" it?
+  textLayer.fillScreen(0);
+  textLayer.swapBuffers();
+
+  int slideIdx = 0;
+  while (!checkExitSignal()) {
+    gfxLayer.fillScreen(bcolor2);
+    drawPNGByIndex(SLIDES_DIRECTORY, slideIdx++);
+    gfxLayer.swapBuffers();
+    if (slideIdx == numFiles) {
+      if (loop) slideIdx = 0;
+      else break;
+    }
+    delay(slideDelayMs);
+  }
+
   // on player exit...
   gfxLayer.fillScreen(bcolor2);
   gfxLayer.swapBuffers();
@@ -570,71 +615,75 @@ void OnPress(int key) {
     // Serial.print((char)key_dec);
     cliDrawChar(key_dec);
     commandBuffer[commandBufferIdx++] = key_dec;
-  } else routeKbSpecial((nonCharsAndShortcuts) key_dec);
+  } else routeKbSpecial((nonCharsAndShortcuts)key_dec);
 }
 
 // SDIO FUNCTIONS
 // PNG/JPG STUFF
-
-void pngDraw(PNGDRAW *pDraw){
+void pngDrawCallback(PNGDRAW *pDraw) {
   // TODO: SCALE IMAGE DOWN SOMEHOW & GET MAX COLOR DEPTH
   uint16_t pngPixels[kMatrixWidth];
   png.getLineAsRGB565(pDraw, pngPixels, PNG_RGB565_LITTLE_ENDIAN, 0xffffffff);
 
   rgb16 color565;
-  for (int x = 0; x < kMatrixWidth; x++){
+  for (int x = 0; x < kMatrixWidth; x++) {
     color565 = pngPixels[x];
     gfxLayer.drawPixel(x, pDraw->y, color565);
   }
 }
 
 // Unlike pngDraw, this gets called every 8(?) rows...  (probably something about JPEG format)
-void jpgDraw(JPEGDRAW *pDraw){
+void jpgDrawCallback(JPEGDRAW *pDraw) {
   rgb16 color565;
-  for (int y = 0; y < pDraw->iHeight; y++){
-    for (int x = 0; x < pDraw->iWidth; x++){
+  for (int y = 0; y < pDraw->iHeight; y++) {
+    for (int x = 0; x < pDraw->iWidth; x++) {
       // pPixels is 8 rows in 1 continuous array; offset x coord accordingly
-      color565 = pDraw->pPixels[x + (y*pDraw->iWidth)];
-      gfxLayer.drawPixel(x, y+pDraw->y, color565);
+      color565 = pDraw->pPixels[x + (y * pDraw->iWidth)];
+      gfxLayer.drawPixel(x, y + pDraw->y, color565);
     }
   }
 }
 
-void imgViewerLoop(int index, char filetype){
+// this is reused by the slideshow program
+void drawPNGByIndex(const char *baseDir, int index) {
+  char imgPath[256] = "";
+  getFilenameByIndex(baseDir, index, imgPath, ".PNG");
+
+  // Serial.println("Start drawing png");
+  if (!png.open((const char *)imgPath, bankOpen, bankClose, bankRead, bankSeek, pngDrawCallback)) {
+    png.decode(NULL, 0);
+    png.close();
+  }
+}
+
+void imgViewerLoop(int index, char filetype) {
   // inCLI = false;
   // Serial.println("IMG Loop Entered");
   // static unsigned long displayStartTime_millis;
   // unsigned long now = millis();
-  char imgPath[256] = "";
   // TODO: probably easy to lower the repetition
-  switch(filetype){
+  switch (filetype) {
     case 'p':
-      getFilenameByIndex(PNG_DIRECTORY, index, imgPath, ".PNG");
-      
-      // Serial.println("Start drawing png");
-      if (!png.open((const char *) imgPath, bankOpen, bankClose, bankRead, bankSeek, pngDraw)) {
-        // Serial.printf("image specs: (%d x %d), %d bpp, pixel type: %d\n", png.getWidth(), png.getHeight(), png.getBpp(), png.getPixelType());
-        png.decode(NULL, 0);
-        png.close();
-      } else return;
+      drawPNGByIndex(PNG_DIRECTORY, index);
       break;
 
-    case 'j': {
-      getFilenameByIndex(JPG_DIRECTORY, index, imgPath, ".JPG");
-      if (jpg.open((const char *) imgPath, bankOpen, bankClose, bankRead, bankSeek, jpgDraw)) {
-        // Serial.printf("image specs: (%d x %d), %d bpp, pixel type: %d\n", png.getWidth(), png.getHeight(), png.getBpp(), png.getPixelType());
-        jpg.decode(0, 0, NULL);
-        jpg.close();
-      } else return;
-      break;
-    }
+    case 'j':
+      {
+        char imgPath[256] = "";
+        getFilenameByIndex(JPG_DIRECTORY, index, imgPath, ".JPG");
+        if (jpg.open((const char *)imgPath, bankOpen, bankClose, bankRead, bankSeek, jpgDrawCallback)) {
+          jpg.decode(0, 0, NULL);
+          jpg.close();
+        } else return;
+        break;
+      }
   }
 
   gfxLayer.swapBuffers();
 
-  while (!checkExitSignal()); // wait for Esc
+  while (!checkExitSignal())
+    ;  // wait for Esc
 }
-
 
 // GIF STUFF
 void screenClearCallback(void) {
@@ -666,7 +715,7 @@ void gifPlayerLoop(int index) {
   // static unsigned long displayStartTime_millis;
   // unsigned long now = millis();
   // matrix.addLayer(&gfxLayer);
-  
+
   if (openFilenameByIndex(GIF_DIRECTORY, index, ".GIF") >= 0) {
     if (gifDecoder.startDecoding() < 0) {
       Serial.println("gifDecoder broke for some reason");
@@ -686,26 +735,29 @@ void gifPlayerLoop(int index) {
 }
 
 // Teensy register-level hack to restart the program (like a power cycle or Arduino reset button)
-int cpuRestart(void * args) { ( *((uint32_t *)0xE000ED0C) = 0x5FA0004); return 0; }
+int cpuRestart(void *args) {
+  (*((uint32_t *)0xE000ED0C) = 0x5FA0004);
+  return 0;
+}
 
-int displayVersion(void * args){
+int displayVersion(void *args) {
   cliDrawString("matrixOS [Version 1.0.0.0]");
   cliDrawString("(c) 2024 Austin S., CJ B., Jacob D.");
   return 0;
 }
 
-int clearScreen(void * args){
-    textLayer.fillScreen(0);
-    
-    textLayer.swapBuffers();
-    setCursor(0, 0);
+int clearScreen(void *args) {
+  textLayer.fillScreen(0);
 
-    return 0;
+  textLayer.swapBuffers();
+  setCursor(0, 0);
+
+  return 0;
 }
 
-int echoText(void * args){
-  char ** arguments = (char**) args;
-  while (*(++arguments)){
+int echoText(void *args) {
+  char **arguments = (char **)args;
+  while (*(++arguments)) {
     cliDrawString(*arguments, false);
     cliDrawString(" ", false);
   }
@@ -714,9 +766,9 @@ int echoText(void * args){
 }
 
 
-int setColor(void * args){
-  char ** arguments = (char**) args;
-  if (!arguments[1]){
+int setColor(void *args) {
+  char **arguments = (char **)args;
+  if (!arguments[1]) {
     cliDrawString("No Color Provided");
     return 1;
   }
@@ -724,7 +776,7 @@ int setColor(void * args){
   rgb24 bcolor;
   char background = arguments[1][0];
   char foreground;
-  bool both = (bool) arguments[1][1];
+  bool both = (bool)arguments[1][1];
   if (!both)
     foreground = background;
   else
@@ -734,36 +786,34 @@ int setColor(void * args){
 
   fcolor = getColor(foreground);
   bool invalid = invalidColor;
-  if (both){
+  if (both) {
     bcolor = getColor(background);
     invalid = invalid || invalidColor;
-  }
-  else{
-    if (fcolor.red == bcolor2.red && fcolor.green == bcolor2.green && fcolor.blue == bcolor2.blue){
+  } else {
+    if (fcolor.red == bcolor2.red && fcolor.green == bcolor2.green && fcolor.blue == bcolor2.blue) {
       invalid = true;
     }
   }
 
 
-  if (!invalid && (fcolor.red != bcolor.red || fcolor.green != bcolor.green || fcolor.blue != bcolor.blue)){
+  if (!invalid && (fcolor.red != bcolor.red || fcolor.green != bcolor.green || fcolor.blue != bcolor.blue)) {
     fcolor2 = fcolor;
     textLayer.setIndexedColor(1, fcolor);
-    if (both){
+    if (both) {
       bcolor2 = bcolor;
       gfxLayer.fillScreen(bcolor);
       gfxLayer.swapBuffers();
     }
     return 0;
-  }
-  else{
+  } else {
     cliDrawString("Invalid Color");
   }
-    return 0;
+  return 0;
 }
 
-int bright(void * args){
-  char ** arguments = (char**) args;
-  if (!arguments[1]){
+int bright(void *args) {
+  char **arguments = (char **)args;
+  if (!arguments[1]) {
     cliDrawString("No brightness specified, resetting to 255");
     matrix.setBrightness(255);
     MainScreen->matrixBrightness = 255;
@@ -775,8 +825,7 @@ int bright(void * args){
   if (arg1 < 10) {
     cliDrawString("Too low, setting to 10");
     arg1 = 10;
-  }
-  else if (arg1 > 255) {
+  } else if (arg1 > 255) {
     cliDrawString("Too high, setting to 255");
     arg1 = 255;
   }
@@ -787,7 +836,7 @@ int bright(void * args){
   return 0;
 }
 
-int cliRGB(void * args) {
+int cliRGB(void *args) {
   runRGB = !runRGB;
   if (runRGB)
     cliDrawString("TASTE THE RAINBOW");
