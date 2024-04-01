@@ -559,7 +559,7 @@ void routeKbSpecial(nonCharsAndShortcuts key) {
     case Tab: break;
     case Esc: raiseExitFlag(); break;
     case CtrlL: fakeCommand("cls"); break;
-    case CtrlAltDelete: fakeCommand("reset"); break;
+    case CtrlAltDelete: cpuRestart(NULL); break;
   }
 }
 
