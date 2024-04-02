@@ -35,8 +35,8 @@
 
 // # of arguments (including command) allowed in a CLI command
 #define COMMAND_TOKEN_LIMIT 8
-#define COMMAND_MAX_LENGTH 128
-#define PROMPT "> "
+#define COMMAND_MAX_LENGTH 45
+#define PROMPT "\n> "
 // Chip select for SD card
 #define SD_CS BUILTIN_SDCARD
 // Teensy SD Library requires a trailing slash in the directory name
@@ -140,10 +140,13 @@ void setupCommands(void) {
   }
 
   appendCommand("help", "Displays this help screen.", "", help);
-  appendCommand("gif", "Plays a .gif file from the SD card.", "", cliGif);
-  appendCommand("png", "Displays a .png file from the SD card.", "", cliPNG);
-  appendCommand("jpg", "Displays a .jpg file from the SD card.", "", cliJPG);
-  appendCommand("slides", "Plays the slideshow on the SD card.", "    Argument 1: Delay in ms\n    Argument 2: Disable loop", slides);
+  appendCommand("gif", "Plays a .gif file from the SD card.", "    Arg 1: Index of the .GIF file", cliGif);
+  appendCommand("png", "Displays a .png file from the SD card.", "    Arg 1: Index of the .PNG file"
+                                                                 "Use left and right arrows to move between files.", cliPNG);
+  appendCommand("jpg", "Displays a .jpg file from the SD card.", "    Arg 1: Index of the .JPG file"
+                                                                 "Use left and right arrows to move between files.", cliJPG);
+  appendCommand("slides", "Plays the slideshow on the SD card.", "    Argument 1: Delay in ms\n"
+                                                                 "    Argument 2: Disable loop", slides);
   appendCommand("sleep", "Sets the computer to sleep.", "Press any key to wake up from sleep.", sleep_com);
   appendCommand("echo", "Echoes input to console.", "", echoText);
   appendCommand("color", "Changes text & bg colors.", "If there is one argument, it sets the foregroundcolor. " 
@@ -156,11 +159,11 @@ void setupCommands(void) {
                                                       "    4 = Red       C = Light Red\n"
                                                       "    5 = Purple    D = Light Purple\n"
                                                       "    6 = Yellow    E = Light Yellow\n"
-                                                      "    7 = White     F = Bright White\n", setColor);
+                                                      "    7 = White     F = Bright White", setColor);
   appendCommand("cls", "Clears terminal output.", "", clearScreen);
   appendCommand("ver", "Displays current version.", "", displayVersion);
   appendCommand("reset", "Resets the system.", "", cpuRestart);
-  appendCommand("bright", "Changes the global brightness.", "", bright);
+  appendCommand("bright", "Changes the global brightness.", "    Argument 1: Brightness level (10-255)", bright);
   appendCommand("rgb", "Toggles RGB text mode.", "", cliRGB);
 }
 
@@ -183,20 +186,11 @@ void setup() {
   textLayer.enableColorCorrection(true);
   textLayer.setFont(DEFAULT_FONT);
 
-  // Clear screen
-  // backgroundLayer.fillScreen(colorBlack);
-  // backgroundLayer.swapBuffers();
-
-
-
-
-
   displayVersion(NULL);
-  cursorNewline();
 
   // KEYBOARD INIT STUFF
   myusb.begin();
-  keyboard1.attachPress(OnPress);
+  keyboard1.attachRelease(OnRelease);
   // keyboard1.attachRawPress(OnRawPress);
   // keyboard1.attachRawRelease(OnRawRelease);
   // SDIO/GIF INIT STUFF
@@ -271,38 +265,22 @@ void serialEvent() {
 
 // CLI FUNCTIONS
 void cursorNewline() {
-  // save last cursor pos for backspace
-  MainScreen->termLastLineCurX = MainScreen->termCursorX;
-  MainScreen->termLastLineCurY = MainScreen->termCursorY;
-
   MainScreen->termCursorX = 0;
   MainScreen->termCursorY += CHAR_HEIGHT;
-
   Serial.println();
 }
 
-// TODO: still a hacky solution in terms of cursor movement
 void cursorBackspace() {
+  if (MainScreen->termCursorX > 2 * CHAR_WIDTH)
+  {
+    commandBuffer[--commandBufferIdx] = '\0';
+    MainScreen->termCursorX -= CHAR_WIDTH;
 
-  commandBuffer[--commandBufferIdx] = '\0';
-
-  MainScreen->termCursorX -= CHAR_WIDTH;
-  // TODO: need much better logic for going back a line
-  if (MainScreen->termCursorX < 0) {
-    if (MainScreen->termLastLineCurX || MainScreen->termLastLineCurY) {
-      // restore last cursor pos
-      MainScreen->termCursorX = MainScreen->termLastLineCurX;
-      MainScreen->termCursorY = MainScreen->termLastLineCurY;
-    } else {
-      MainScreen->termCursorX = kMatrixWidth - CHAR_WIDTH;  // last character
-      MainScreen->termCursorY -= CHAR_HEIGHT;
-    }
-  }
-
-  // erase pixels of erased character
-  for (int x = 0; x < CHAR_WIDTH; x++) {
-    for (int y = 0; y < CHAR_HEIGHT; y++) {
-      textLayer.drawPixel(MainScreen->termCursorX + x, MainScreen->termCursorY + y, 0);
+    // erase pixels of erased character
+    for (int x = 0; x < CHAR_WIDTH; x++) {
+      for (int y = 0; y < CHAR_HEIGHT; y++) {
+        textLayer.drawPixel(MainScreen->termCursorX + x, MainScreen->termCursorY + y, 0);
+      }
     }
   }
 }
@@ -645,7 +623,8 @@ void routeKbSpecial(nonCharsAndShortcuts key) {
 }
 
 // TODO: as this is (presumably) an ISR, consider limiting what it does
-void OnPress(int key) {
+void OnRelease(int key) {
+  keyboard1.attachRelease(NULL);
   if (isSleeping)
   {
     isSleeping = false;
@@ -653,11 +632,12 @@ void OnPress(int key) {
     matrix.setBrightness(MainScreen->matrixBrightness);
   }
   unsigned char key_dec = decodeKey(key, keyboard1.getOemKey(), keyboard1.getModifiers(), keyboard1.LEDS());
-  if (key_dec && key_dec < 128) {
+  if (key_dec && key_dec < 128 && commandBufferIdx < COMMAND_MAX_LENGTH) {
     // Serial.print((char)key_dec);
     cliDrawChar(key_dec);
     commandBuffer[commandBufferIdx++] = key_dec;
   } else routeKbSpecial((nonCharsAndShortcuts)key_dec);
+  keyboard1.attachRelease(OnRelease);
 }
 
 // SDIO FUNCTIONS

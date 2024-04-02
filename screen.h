@@ -33,8 +33,6 @@ class Screen
     uint8_t matrixBrightness = 255;
     uint16_t termCursorX = 0;
     uint16_t termCursorY = 0;
-    uint16_t termLastLineCurX = 0;
-    uint16_t termLastLineCurY = 0;
     rgb24 termBgColor = colorBlack;
     rgb24 termInputColor = colorGreen;
     rgb24 termResponseColor = colorWhite;
