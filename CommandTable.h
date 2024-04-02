@@ -13,6 +13,7 @@ typedef int (*fpointer)(void *);
 typedef struct Command{
 	const char * title;
 	const char * helpInfo;
+  const char * longHelp;
 	fpointer function;
 	struct Command * next;
 }Command;
@@ -25,9 +26,9 @@ bool initCMDTable(unsigned long size);
 
 unsigned long long getHash(char * str);
 
-Command * genCommand(const char * title, const char * helpInfo, fpointer function);
+Command * genCommand(const char * title, const char * helpInfo, const char * longHelp, fpointer function);
 
-bool appendCommand(const char * title, const char * helpInfo, fpointer function);
+bool appendCommand(const char * title, const char * helpInfo, const char * longHelp, fpointer function);
 
 void replaceNextSpace(char * str);
 

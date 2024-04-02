@@ -12,9 +12,6 @@ void Serialprint(const char *msg) {Serial.print(msg);}
 #include <stdlib.h>
 #include <string.h>
 
-
-
-
 static Command ** cmdTable = NULL;
 static unsigned long tableSize = 0;
 static bool isTableInitialized = false;
@@ -62,21 +59,22 @@ unsigned long long getHash(char * str){
 	return hash;
 }
 
-Command * genCommand(const char * title, const char * helpInfo, fpointer function){
+Command * genCommand(const char * title, const char * helpInfo, const char * longHelp, fpointer function){
 	Command * command = (Command*) malloc(sizeof(Command));
 	if (!command) return NULL;
 	command->title = title;
 	command->helpInfo = helpInfo;
+  command->longHelp = longHelp;
 	command->function = function;
 	command->next = NULL;
 	return command;
 }
 
-bool appendCommand(const char * title, const char * helpInfo, fpointer function){
+bool appendCommand(const char * title, const char * helpInfo, const char * longHelp, fpointer function){
 	if (!isTableInitialized){
 		return false;
 	}
-	Command * command = genCommand(title, helpInfo, function);
+	Command * command = genCommand(title, helpInfo, longHelp, function);
 	if (!command) return false;
 
 	unsigned long index = getHash(command->title) % tableSize;

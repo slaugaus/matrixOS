@@ -52,6 +52,8 @@
 // bool inCLI = true;
 bool runRGB = false;
 int rgbIdx = 0;
+bool isSleeping = false;
+unsigned int prevBrightness = 0;
 
 // Processed macros to make a refactor easier, maybe
 // SMARTMATRIX_ALLOCATE_BUFFERS(matrix, kMatrixWidth, kMatrixHeight, kRefreshDepth, kDmaBufferRows, kPanelType, kMatrixOptions);
@@ -137,18 +139,29 @@ void setupCommands(void) {
     cliDrawString("Command Table Initialization Failed");
   }
 
-  appendCommand("help", "displays this help screen", help);
-  appendCommand("gif", "plays a .gif file from the SD card", cliGif);
-  appendCommand("png", "displays a .png file from the SD card", cliPNG);
-  appendCommand("jpg", "displays a .jpg file from the SD card", cliJPG);
-  appendCommand("slides", "plays the slideshow on the SD card (arg1=delay in ms, arg2=no loop)", slides);
-  appendCommand("echo", "echoes input to console", echoText);
-  appendCommand("color", "changes text & bg colors (01-FE like cmd/DOS)", setColor);
-  appendCommand("cls", "clears terminal output (Ctrl+L)", clearScreen);
-  appendCommand("ver", "displays current version", displayVersion);
-  appendCommand("reset", "resets the system (Ctrl+Alt+Del)", cpuRestart);
-  appendCommand("bright", "changes the global brightness (10-255)", bright);
-  appendCommand("rgb", "toggles RGB text mode", cliRGB);
+  appendCommand("help", "Displays this help screen.", "", help);
+  appendCommand("gif", "Plays a .gif file from the SD card.", "", cliGif);
+  appendCommand("png", "Displays a .png file from the SD card.", "", cliPNG);
+  appendCommand("jpg", "Displays a .jpg file from the SD card.", "", cliJPG);
+  appendCommand("slides", "Plays the slideshow on the SD card.", "    Argument 1: Delay in ms\n    Argument 2: Disable loop", slides);
+  appendCommand("sleep", "Sets the computer to sleep.", "Press any key to wake up from sleep.", sleep_com);
+  appendCommand("echo", "Echoes input to console.", "", echoText);
+  appendCommand("color", "Changes text & bg colors.", "If there is one argument, it sets the foregroundcolor. " 
+                                                      "If there are two arguments, it sets the\nbackground color. " 
+                                                      "The available colors are:\n"
+                                                      "    0 = Black     8 = Gray\n"
+                                                      "    1 = Blue      9 = Light Blue\n"
+                                                      "    2 = Green     A = Light Green\n"
+                                                      "    3 = Aqua      B = Light Aqua\n"
+                                                      "    4 = Red       C = Light Red\n"
+                                                      "    5 = Purple    D = Light Purple\n"
+                                                      "    6 = Yellow    E = Light Yellow\n"
+                                                      "    7 = White     F = Bright White\n", setColor);
+  appendCommand("cls", "Clears terminal output.", "", clearScreen);
+  appendCommand("ver", "Displays current version.", "", displayVersion);
+  appendCommand("reset", "Resets the system.", "", cpuRestart);
+  appendCommand("bright", "Changes the global brightness.", "", bright);
+  appendCommand("rgb", "Toggles RGB text mode.", "", cliRGB);
 }
 
 void setup() {
@@ -174,6 +187,10 @@ void setup() {
   // backgroundLayer.fillScreen(colorBlack);
   // backgroundLayer.swapBuffers();
 
+
+
+
+
   displayVersion(NULL);
   cursorNewline();
 
@@ -192,6 +209,7 @@ void setup() {
   gifDecoder.setFileReadCallback(fileReadCallback);
   gifDecoder.setFileReadBlockCallback(fileReadBlockCallback);
   gifDecoder.setFileSizeCallback(fileSizeCallback);
+
 
   setupCommands();
 
@@ -357,6 +375,8 @@ void parseCommand(char text[]) {
   if (command) {
     if (tokens[1] && !strcmp("/?", tokens[1])) {
       cliDrawString(command->helpInfo);
+      cliDrawString(command->longHelp);
+      drawPrompt();
       return;
     }
     Serial.println("Command exists");
@@ -422,6 +442,17 @@ int help(void *args) {
   return 0;
 }
 
+int sleep_com(void *args)
+{
+  char **tokens = (char **)args;
+  if (!tokens[1]) {
+    isSleeping = true;
+    prevBrightness = MainScreen->matrixBrightness;
+    matrix.setBrightness(0);
+  }
+  return 0;
+}
+
 // Enumerate and possibly display the files of a specified type (.XXX, all caps) in a folder
 int enumerateFiles(const char *directoryName, bool displayFilenames, const char *fileType) {
   numberOfFiles = 0;
@@ -470,7 +501,7 @@ int cliPNG(void *args) {
   textLayer.fillScreen(0);
   textLayer.swapBuffers();
 
-  imgViewerLoop(--idx, 'p');
+  imgViewerLoop(--idx, 'p', numFiles);
   // on viewer exit...
   gfxLayer.fillScreen(bcolor2);
   gfxLayer.swapBuffers();
@@ -501,7 +532,7 @@ int cliJPG(void *args) {
   textLayer.fillScreen(0);
   textLayer.swapBuffers();
 
-  imgViewerLoop(--idx, 'j');
+  imgViewerLoop(--idx, 'j', numFiles);
   // on viewer exit...
   gfxLayer.fillScreen(bcolor2);
   gfxLayer.swapBuffers();
@@ -543,6 +574,7 @@ int cliGif(void *args) {
 int slides(void *args) {
   char **tokens = (char **)args;
   int numFiles = enumerateFiles(SLIDES_DIRECTORY, false, ".PNG");
+
   if (numFiles < 0) {
     cliDrawString("No slides directory on SD card, or SD disconnected.");
     return 1;
@@ -605,11 +637,21 @@ void routeKbSpecial(nonCharsAndShortcuts key) {
     case Esc: raiseExitFlag(); break;
     case CtrlL: fakeCommand("cls"); break;
     case CtrlAltDelete: cpuRestart(NULL); break;
+    case Left: raiseLeftFlag(); break;
+    case Right: raiseRightFlag(); break;
+    case F5: MainScreen->matrixBrightness -= 32; matrix.setBrightness(MainScreen->matrixBrightness); break;
+    case F6: MainScreen->matrixBrightness += 32; matrix.setBrightness(MainScreen->matrixBrightness); break;
   }
 }
 
 // TODO: as this is (presumably) an ISR, consider limiting what it does
 void OnPress(int key) {
+  if (isSleeping)
+  {
+    isSleeping = false;
+    MainScreen->matrixBrightness = prevBrightness;
+    matrix.setBrightness(MainScreen->matrixBrightness);
+  }
   unsigned char key_dec = decodeKey(key, keyboard1.getOemKey(), keyboard1.getModifiers(), keyboard1.LEDS());
   if (key_dec && key_dec < 128) {
     // Serial.print((char)key_dec);
@@ -656,7 +698,16 @@ void drawPNGByIndex(const char *baseDir, int index) {
   }
 }
 
-void imgViewerLoop(int index, char filetype) {
+void drawJPGByIndex(const char *baseDir, int index) {
+  char imgPath[256] = "";
+  getFilenameByIndex(baseDir, index, imgPath, ".JPG");
+  if (jpg.open((const char *)imgPath, bankOpen, bankClose, bankRead, bankSeek, jpgDrawCallback)) {
+    jpg.decode(0, 0, NULL);
+    jpg.close();
+  }
+}
+
+void imgViewerLoop(int index, char filetype, int count) {
   // inCLI = false;
   // Serial.println("IMG Loop Entered");
   // static unsigned long displayStartTime_millis;
@@ -668,21 +719,33 @@ void imgViewerLoop(int index, char filetype) {
       break;
 
     case 'j':
-      {
-        char imgPath[256] = "";
-        getFilenameByIndex(JPG_DIRECTORY, index, imgPath, ".JPG");
-        if (jpg.open((const char *)imgPath, bankOpen, bankClose, bankRead, bankSeek, jpgDrawCallback)) {
-          jpg.decode(0, 0, NULL);
-          jpg.close();
-        } else return;
-        break;
-      }
+      drawJPGByIndex(JPG_DIRECTORY, index);
+      break;
   }
 
   gfxLayer.swapBuffers();
 
-  while (!checkExitSignal())
-    ;  // wait for Esc
+  while (!checkExitSignal()){
+    if (isRightPressed()){ // +
+      if (++index == count)
+        index = 0;
+        if (filetype == 'p')
+          drawPNGByIndex(PNG_DIRECTORY, index);
+        else if (filetype == 'j')
+          drawJPGByIndex(JPG_DIRECTORY, index);
+        gfxLayer.swapBuffers();
+    }
+    else if (isLeftPressed()){  // -
+      if (--index == -1)
+        index = count - 1;
+        if (filetype == 'p')
+          drawPNGByIndex(PNG_DIRECTORY, index);
+        else if (filetype == 'j')
+          drawJPGByIndex(JPG_DIRECTORY, index);
+        gfxLayer.swapBuffers();
+    }
+  }
+      // wait for Esc
 }
 
 // GIF STUFF
@@ -768,33 +831,42 @@ int echoText(void *args) {
 
 int setColor(void *args) {
   char **arguments = (char **)args;
-  if (!arguments[1]) {
-    cliDrawString("No Color Provided");
-    return 1;
+  if (runRGB){
+    runRGB = false;
+    textLayer.setIndexedColor(1, fcolor2);
   }
   rgb24 fcolor;
   rgb24 bcolor;
-  char background = arguments[1][0];
+  bool invalid = false;
+  bool both = true;
+  char background;
   char foreground;
-  bool both = (bool)arguments[1][1];
-  if (!both)
-    foreground = background;
-  else
-    foreground = arguments[1][1];
-
-
-
-  fcolor = getColor(foreground);
-  bool invalid = invalidColor;
-  if (both) {
-    bcolor = getColor(background);
-    invalid = invalid || invalidColor;
-  } else {
-    if (fcolor.red == bcolor2.red && fcolor.green == bcolor2.green && fcolor.blue == bcolor2.blue) {
-      invalid = true;
-    }
+  if (!arguments[1]) {
+    bcolor = getColor('0');
+    fcolor = getColor('7');
   }
+  else{
+    background = arguments[1][0];
+    both = (bool)arguments[1][1];
+    if (!both)
+      foreground = background;
+    else
+      foreground = arguments[1][1];
 
+
+
+    fcolor = getColor(foreground);
+    invalid = invalidColor;
+    if (both) {
+      bcolor = getColor(background);
+      invalid = invalid || invalidColor;
+    } else {
+      if (fcolor.red == bcolor2.red && fcolor.green == bcolor2.green && fcolor.blue == bcolor2.blue) {
+        invalid = true;
+      }
+    }
+
+  }
 
   if (!invalid && (fcolor.red != bcolor.red || fcolor.green != bcolor.green || fcolor.blue != bcolor.blue)) {
     fcolor2 = fcolor;

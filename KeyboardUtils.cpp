@@ -5,7 +5,7 @@
 #include "usb_hid_keys.h"
 // #include "signals.h"
 
-#define KB_DEBUG_PRINT
+// #define KB_DEBUG_PRINT
 
 // too lazy to make this a macro
 bool isTypableKey(int oemKey, int leds) {
@@ -65,6 +65,10 @@ unsigned char handleNonChar(int oemKey, int mods){
         case KEY_BACKSPACE: return Backspace;
         case KEY_TAB: return Tab;
         case KEY_ESC: return Esc;
+        case KEY_LEFT: return Left;
+        case KEY_RIGHT: return Right;
+        case KEY_F5: return F5;
+        case KEY_F6: return F6;
       }
   }
   return 0;
