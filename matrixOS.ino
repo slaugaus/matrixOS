@@ -191,6 +191,7 @@ void setup() {
   // KEYBOARD INIT STUFF
   myusb.begin();
   keyboard1.attachRelease(OnRelease);
+  keyboard1.numLock(true);
   // keyboard1.attachRawPress(OnRawPress);
   // keyboard1.attachRawRelease(OnRawRelease);
   // SDIO/GIF INIT STUFF
@@ -644,11 +645,11 @@ void OnRelease(int key) {
 // PNG/JPG STUFF
 void pngDrawCallback(PNGDRAW *pDraw) {
   // TODO: SCALE IMAGE DOWN SOMEHOW & GET MAX COLOR DEPTH
-  uint16_t pngPixels[kMatrixWidth];
-  png.getLineAsRGB565(pDraw, pngPixels, PNG_RGB565_LITTLE_ENDIAN, 0xffffffff);
+  uint16_t pngPixels[pDraw->iWidth];
+  png.getLineAsRGB565(pDraw, pngPixels, PNG_RGB565_LITTLE_ENDIAN, 0xFFFFFFFF);
 
   rgb16 color565;
-  for (int x = 0; x < kMatrixWidth; x++) {
+  for (int x = 0; x < pDraw->iWidth; x++) {
     color565 = pngPixels[x];
     gfxLayer.drawPixel(x, pDraw->y, color565);
   }
@@ -707,22 +708,24 @@ void imgViewerLoop(int index, char filetype, int count) {
 
   while (!checkExitSignal()){
     if (isRightPressed()){ // +
+      gfxLayer.fillScreen(bcolor2);
       if (++index == count)
         index = 0;
         if (filetype == 'p')
           drawPNGByIndex(PNG_DIRECTORY, index);
         else if (filetype == 'j')
           drawJPGByIndex(JPG_DIRECTORY, index);
-        gfxLayer.swapBuffers();
+      gfxLayer.swapBuffers();
     }
     else if (isLeftPressed()){  // -
+      gfxLayer.fillScreen(bcolor2);
       if (--index == -1)
         index = count - 1;
         if (filetype == 'p')
           drawPNGByIndex(PNG_DIRECTORY, index);
         else if (filetype == 'j')
           drawJPGByIndex(JPG_DIRECTORY, index);
-        gfxLayer.swapBuffers();
+      gfxLayer.swapBuffers();
     }
   }
       // wait for Esc

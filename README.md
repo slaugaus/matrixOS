@@ -17,7 +17,7 @@ OS-like thing for HUB75 LED matrix panels (Teensy 4 + SmartLED Shield)
 
 [SmartMatrix](https://github.com/pixelmatix/SmartMatrix)
 
-[PNGdec](https://github.com/bitbank2/PNGdec/) and [JPEGDEC](https://github.com/bitbank2/JPEGDEC/)
+[PNGdec](https://github.com/bitbank2/PNGdec/) [MUST USE VERSION 1.0.1, VERSION 1.0.2 DOES NOT WORK] and [JPEGDEC](https://github.com/bitbank2/JPEGDEC/)
 
 [GifDecoder](https://github.com/pixelmatix/GifDecoder) (depends on [AnimatedGIF](https://github.com/bitbank2/AnimatedGIF))
 * [FilenameFunctions](https://github.com/pixelmatix/GifDecoder/tree/master/examples/SmartMatrixGifPlayer), with some modifications, from GifDecoder example sketches

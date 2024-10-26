@@ -11,7 +11,7 @@
 bool isTypableKey(int oemKey, int leds) {
   return (oemKey >= KEY_A && oemKey <= KEY_0) ||  // letters, num row
          (oemKey >= KEY_MINUS && oemKey <= KEY_SLASH) ||  // punctuation
-         (oemKey >= KEY_KPSLASH && oemKey <= KEY_KPENTER) ||  // keypad punctuation
+         (oemKey >= KEY_KPSLASH && oemKey <= KEY_KPPLUS) ||  // keypad punctuation
          (!(leds-1) && oemKey >= KEY_KP1 && oemKey <= KEY_KPDOT)  // keypad nums if NumLock
   ;
 }
@@ -23,7 +23,7 @@ unsigned char decodeKey(int key, int oemKey, int mods, int leds){
 
   // Only shift or nothing held - pass letters
   // if (!(mods-2) || !mods) {
-  if ( !((mods-2) && mods) && isTypableKey(oemKey, leds) ) {  // De Morgan's Theorem
+  if ( !((mods-2) && mods) && isTypableKey(oemKey, leds)) {  // De Morgan's Theorem
     return key;
   }
   // Otherwise it's a shortcut
@@ -46,6 +46,7 @@ unsigned char handleNonChar(int oemKey, int mods){
     case Ctrl:
       switch(oemKey){
         case KEY_L: return CtrlL; // Ctrl+L clears screen
+        case KEY_C: return Esc;  // Ctrl + C escapes for cancel
       }
     // Shift caught in decodeKey for capitalization
     case CtrlShift:
@@ -61,7 +62,7 @@ unsigned char handleNonChar(int oemKey, int mods){
     default:
       switch(oemKey){
         case KEY_SPACE: return ' '; // Shift+Space returns a non-char; stupid hack to not do that
-        case KEY_ENTER: return Enter;
+        case KEY_ENTER: case KEY_KPENTER: return Enter;
         case KEY_BACKSPACE: return Backspace;
         case KEY_TAB: return Tab;
         case KEY_ESC: return Esc;
