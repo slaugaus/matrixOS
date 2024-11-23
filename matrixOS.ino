@@ -36,6 +36,8 @@
 // # of arguments (including command) allowed in a CLI command
 #define COMMAND_TOKEN_LIMIT 8
 #define COMMAND_MAX_LENGTH 45
+#define CLI_MAX_LINES 20
+#define CLI_MAX_LENGTH 47
 #define PROMPT "\n> "
 // Chip select for SD card
 #define SD_CS BUILTIN_SDCARD
@@ -265,15 +267,43 @@ void serialEvent() {
 // MATRIX FUNCTIONS
 
 // CLI FUNCTIONS
+char cliBuffer[CLI_MAX_LINES+2][CLI_MAX_LENGTH + 2]; // + 1 for space for null terminator and for blank line buffer
+unsigned int cliLine = 0;
+unsigned int cliIdx = 0;
+
+// CLI Buffer to modify for scrolling
+void scrollCLIBuffer(void){
+  cliLine = 0;
+  cliIdx = 0;
+  for (int i = 0; i < CLI_MAX_LINES +1; i++){
+    memcpy(cliBuffer[i], cliBuffer[i+1], CLI_MAX_LENGTH + 1);
+  }
+  textLayer.fillScreen(0);
+  setCursor(0, 0);
+  for (int i = 0; i < CLI_MAX_LINES; i++){
+    cliDrawString((const char*) cliBuffer[i]);
+  }
+  textLayer.swapBuffers();
+}
+
 void cursorNewline() {
+  cliIdx = 0;
+  cliLine++;
   MainScreen->termCursorX = 0;
-  MainScreen->termCursorY += CHAR_HEIGHT;
+  if (cliLine >= CLI_MAX_LINES+1){
+    scrollCLIBuffer();
+  }
+  else{
+    MainScreen->termCursorY += CHAR_HEIGHT;
+  }
   Serial.println();
 }
+
 
 void cursorBackspace() {
   if (MainScreen->termCursorX > 2 * CHAR_WIDTH)
   {
+    cliBuffer[cliLine][--cliIdx] = 0;
     commandBuffer[--commandBufferIdx] = '\0';
     MainScreen->termCursorX -= CHAR_WIDTH;
 
@@ -295,8 +325,7 @@ void advanceCursor() {
 void moveCursor(int dx = 0, int dy = 0) {
   MainScreen->termCursorX += (dx * CHAR_WIDTH);
   if (MainScreen->termCursorX >= kMatrixWidth) {
-    MainScreen->termCursorX = 0;
-    MainScreen->termCursorY += CHAR_HEIGHT;
+    cursorNewline();
   }
   MainScreen->termCursorY += (dy * CHAR_HEIGHT);
 }
@@ -307,9 +336,12 @@ void setCursor(int x = -1, int y = -1) {
   if (y < kMatrixHeight && x >= 0) MainScreen->termCursorY = y;
 }
 
+
+
 void cliDrawChar(char chr) {
   // 3rd argument (index) is unused (TODOd) in SmartMatrix
   textLayer.drawChar(MainScreen->termCursorX, MainScreen->termCursorY, 1, chr);
+  cliBuffer[cliLine][cliIdx++] = chr;
   Serial.print(chr);
   advanceCursor();
 }
@@ -793,10 +825,12 @@ int displayVersion(void *args) {
 }
 
 int clearScreen(void *args) {
+  cliIdx = 0;
+  cliLine = 0;
   textLayer.fillScreen(0);
-
-  textLayer.swapBuffers();
   setCursor(0, 0);
+  memset(cliBuffer, 0, sizeof(cliBuffer));
+  textLayer.swapBuffers();
 
   return 0;
 }
